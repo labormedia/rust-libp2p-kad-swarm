@@ -1,5 +1,6 @@
 use std::io;
 use futures::executor::block_on;
+use libp2p::relay::v2::client::Client;
 use std::str::FromStr;
 use std::time::Duration;
 use libp2p::identity::Keypair;
@@ -58,6 +59,7 @@ struct LookupBehaviour {
     pub(crate) kademlia: Kademlia<MemoryStore>,
     pub(crate) ping: ping::Behaviour,
     pub(crate) identify: identify::Behaviour,
+    relay: relay::client::Client,
     keep_alive: swarm::keep_alive::Behaviour,
 }
 
@@ -79,16 +81,19 @@ impl FromStr for Network {
 
 impl Network {
     fn bootnodes(&self) -> Vec<(Multiaddr, PeerId)> {
-        vec![
-            ("/dns/p2p.cc3-0.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWDgtynm4S9M3m6ZZhXYu2RrWKdvkCSScc25xKDVSg1Sjd").unwrap()),
-            ("/dns/p2p.cc3-1.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWNpGriWPmf621Lza9UWU9eLLBdCFaErf6d4HSK7Bcqnv4").unwrap()),
-            ("/dns/p2p.cc3-2.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWLmLiB4AenmN2g2mHbhNXbUcNiGi99sAkSk1kAQedp8uE").unwrap()),
-            ("/dns/p2p.cc3-3.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWEGHw84b4hfvXEfyq4XWEmWCbRGuHMHQMpby4BAtZ4xJf").unwrap()),
-            ("/dns/p2p.cc3-4.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWF9KDPRMN8WpeyXhEeURZGP8Dmo7go1tDqi7hTYpxV9uW").unwrap()),
-            ("/dns/p2p.cc3-5.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWDiwMeqzvgWNreS9sV1HW3pZv1PA7QGA7HUCo7FzN5gcA").unwrap()),
-            ("/dns/kusama-bootnode-0.paritytech.net/tcp/30333".parse().unwrap(), FromStr::from_str("12D3KooWSueCPH3puP2PcvqPJdNaDNF3jMZjtJtDiSy35pWrbt5h").unwrap()),
-            ("/dns/kusama-bootnode-1.paritytech.net/tcp/30333".parse().unwrap(), FromStr::from_str("12D3KooWQKqane1SqWJNWMQkbia9qiMWXkcHtAdfW5eVF8hbwEDw").unwrap())
-        ]
+        match self {
+            Network::Kusama => vec![
+                ("/dns/p2p.cc3-0.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWDgtynm4S9M3m6ZZhXYu2RrWKdvkCSScc25xKDVSg1Sjd").unwrap()),
+                ("/dns/p2p.cc3-1.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWNpGriWPmf621Lza9UWU9eLLBdCFaErf6d4HSK7Bcqnv4").unwrap()),
+                ("/dns/p2p.cc3-2.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWLmLiB4AenmN2g2mHbhNXbUcNiGi99sAkSk1kAQedp8uE").unwrap()),
+                ("/dns/p2p.cc3-3.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWEGHw84b4hfvXEfyq4XWEmWCbRGuHMHQMpby4BAtZ4xJf").unwrap()),
+                ("/dns/p2p.cc3-4.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWF9KDPRMN8WpeyXhEeURZGP8Dmo7go1tDqi7hTYpxV9uW").unwrap()),
+                ("/dns/p2p.cc3-5.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWDiwMeqzvgWNreS9sV1HW3pZv1PA7QGA7HUCo7FzN5gcA").unwrap()),
+                ("/dns/kusama-bootnode-0.paritytech.net/tcp/30333".parse().unwrap(), FromStr::from_str("12D3KooWSueCPH3puP2PcvqPJdNaDNF3jMZjtJtDiSy35pWrbt5h").unwrap()),
+                ("/dns/kusama-bootnode-1.paritytech.net/tcp/30333".parse().unwrap(), FromStr::from_str("12D3KooWQKqane1SqWJNWMQkbia9qiMWXkcHtAdfW5eVF8hbwEDw").unwrap())
+            ]
+        }
+
         
     }
     fn protocol(&self) -> Option<String> {
@@ -99,21 +104,22 @@ impl Network {
 }
 
 impl LookupClient {
-    fn new(network: Option<Network>) -> Self {
+    fn new(_network: Option<Network>) -> Self {
         let local_key = Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
-        let transport = Self::get_transport(&local_key, &local_peer_id);
+        let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(local_peer_id);
+        let transport = Self::get_transport(&local_key, &local_peer_id, relay_transport);
         let net = Network::Kusama;
-        let behaviour = Self::get_behaviour(&local_key, &local_peer_id, Some(&net));
+        let behaviour = Self::get_behaviour(&local_key, &local_peer_id, Some(&net), relay_client);
         LookupClient {
             local_key: local_key,
             local_peer_id: local_peer_id,
             network: Vec::from([net]),
-            swarm: Self::get_swarm(local_peer_id, Some(Network::Kusama), transport, behaviour)
+            swarm: Self::build_swarm(local_peer_id, Some(Network::Kusama), transport, behaviour)
         }
     }
 
-    fn get_swarm(local_peer_id: PeerId, network: Option<Network>, transport: Boxed<(PeerId, StreamMuxerBox)>,behaviour: LookupBehaviour) -> Swarm<LookupBehaviour> {
+    fn build_swarm(local_peer_id: PeerId, network: Option<Network>, transport: Boxed<(PeerId, StreamMuxerBox)>,behaviour: LookupBehaviour) -> Swarm<LookupBehaviour> {
         let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
         .executor(Box::new(|fut| {
             // async_std::task::spawn(fut);
@@ -127,51 +133,50 @@ impl LookupClient {
         }
         swarm
     }
-    fn get_transport(local_key: &Keypair, local_peer_id: &PeerId) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
+    fn get_transport(local_key: &Keypair, local_peer_id: &PeerId, relay_transport: ClientTransport) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
         let peer_id = local_peer_id.clone();
-        let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(peer_id);
-        // self.relay = relay_client;
-                // Reference: https://github.com/mxinden/libp2p-lookup/blob/41f4e2fc498b44bcdd2d4b381363dea0b740336b/src/main.rs#L136-L175
-                let transport = OrTransport::new(
-                    relay_transport,
-                    block_on(dns::DnsConfig::system(tcp::TcpTransport::new(
-                        tcp::GenTcpConfig::new().port_reuse(true).nodelay(true),
-                    )))
-                    .unwrap(),
-                );
-        
-                let authentication_config = {
-                    let noise_keypair_spec = noise::Keypair::<noise::X25519Spec>::new()
-                        .into_authentic(&local_key)
-                        .unwrap();
-        
-                    noise::NoiseConfig::xx(noise_keypair_spec).into_authenticated()
-                };
-        
-                let multiplexing_config = {
-                    let mut mplex_config = mplex::MplexConfig::new();
-                    mplex_config.set_max_buffer_behaviour(mplex::MaxBufferBehaviour::Block);
-                    mplex_config.set_max_buffer_size(usize::MAX);
-        
-                    let mut yamux_config = yamux::YamuxConfig::default();
-                    // Enable proper flow-control: window updates are only sent when
-                    // buffered data has been consumed.
-                    yamux_config.set_window_update_mode(yamux::WindowUpdateMode::on_read());
-        
-                    core::upgrade::SelectUpgrade::new(yamux_config, mplex_config)
-                        .map_inbound(core::muxing::StreamMuxerBox::new)
-                        .map_outbound(core::muxing::StreamMuxerBox::new)
-                };
-        
-                transport
-                    .upgrade(upgrade::Version::V1)
-                    .authenticate(authentication_config)
-                    .multiplex(multiplexing_config)
-                    .timeout(Duration::from_secs(20))
-                    .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
-                    .boxed()
+        // let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(peer_id);
+        // Reference: https://github.com/mxinden/libp2p-lookup/blob/41f4e2fc498b44bcdd2d4b381363dea0b740336b/src/main.rs#L136-L175
+        let transport = OrTransport::new(
+            relay_transport,
+            block_on(dns::DnsConfig::system(tcp::TcpTransport::new(
+                tcp::GenTcpConfig::new().port_reuse(true).nodelay(true),
+            )))
+            .unwrap(),
+        );
+
+        let authentication_config = {
+            let noise_keypair_spec = noise::Keypair::<noise::X25519Spec>::new()
+                .into_authentic(&local_key)
+                .unwrap();
+
+            noise::NoiseConfig::xx(noise_keypair_spec).into_authenticated()
+        };
+
+        let multiplexing_config = {
+            let mut mplex_config = mplex::MplexConfig::new();
+            mplex_config.set_max_buffer_behaviour(mplex::MaxBufferBehaviour::Block);
+            mplex_config.set_max_buffer_size(usize::MAX);
+
+            let mut yamux_config = yamux::YamuxConfig::default();
+            // Enable proper flow-control: window updates are only sent when
+            // buffered data has been consumed.
+            yamux_config.set_window_update_mode(yamux::WindowUpdateMode::on_read());
+
+            core::upgrade::SelectUpgrade::new(yamux_config, mplex_config)
+                .map_inbound(core::muxing::StreamMuxerBox::new)
+                .map_outbound(core::muxing::StreamMuxerBox::new)
+        };
+
+        transport
+            .upgrade(upgrade::Version::V1)
+            .authenticate(authentication_config)
+            .multiplex(multiplexing_config)
+            .timeout(Duration::from_secs(20))
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+            .boxed()
     }
-    fn get_behaviour(local_key: &Keypair, local_peer_id: &PeerId, network: Option<&Network>) -> LookupBehaviour {
+    fn get_behaviour(local_key: &Keypair, local_peer_id: &PeerId, network: Option<&Network>, relay_client: Client) -> LookupBehaviour {
         let peer_id = local_peer_id.clone();
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(peer_id);
@@ -195,6 +200,7 @@ impl LookupClient {
             kademlia,
             ping,
             identify,
+            relay: relay_client,
             keep_alive: swarm::keep_alive::Behaviour,
         }
     }
