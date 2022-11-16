@@ -46,8 +46,8 @@ use crate::core::muxing::StreamMuxerBox;
 pub struct LookupClient {
     local_key: Keypair,
     local_peer_id: PeerId,
-    behaviour: LookupBehaviour,
-    relay: relay::client::Client,
+    // behaviour: LookupBehaviour,
+    // relay: relay::client::Client,
     // transport: OrTransport<ClientTransport, GenDnsConfig<GenTcpTransport<Tcp>, GenericConnection, GenericConnectionProvider<AsyncStdRuntime>>>,
     swarm: Swarm<LookupBehaviour>
 }
@@ -132,7 +132,7 @@ impl LookupClient {
     }
     fn get_transport(self: &mut Self) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
         let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(self.local_peer_id);
-        self.relay = relay_client;
+        // self.relay = relay_client;
                 // Reference: https://github.com/mxinden/libp2p-lookup/blob/41f4e2fc498b44bcdd2d4b381363dea0b740336b/src/main.rs#L136-L175
                 let transport = OrTransport::new(
                     relay_transport,
@@ -193,13 +193,6 @@ impl LookupClient {
                 .with_agent_version(user_agent),
         );
 
-        // self.behaviour = LookupBehaviour {
-        //     kademlia,
-        //     ping,
-        //     identify,
-        //     keep_alive: swarm::keep_alive::Behaviour,
-        // };
-        // self
         LookupBehaviour {
             kademlia,
             ping,
