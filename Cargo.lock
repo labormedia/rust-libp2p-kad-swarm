@@ -1917,6 +1917,7 @@ dependencies = [
 name = "rust-libp2p-kad-swarm"
 version = "0.1.0"
 dependencies = [
+ "futures",
  "libp2p",
 ]
 
