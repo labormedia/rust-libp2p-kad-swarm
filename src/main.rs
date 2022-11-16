@@ -46,6 +46,7 @@ use crate::core::muxing::StreamMuxerBox;
 pub struct LookupClient {
     local_key: Keypair,
     local_peer_id: PeerId,
+    network: Vec<Network>,
     // behaviour: LookupBehaviour,
     // relay: relay::client::Client,
     // transport: OrTransport<ClientTransport, GenDnsConfig<GenTcpTransport<Tcp>, GenericConnection, GenericConnectionProvider<AsyncStdRuntime>>>,
@@ -98,18 +99,22 @@ impl Network {
 }
 
 impl LookupClient {
-    fn new(self: &mut Self, network: Option<Network>) -> &Self {
-        self.set_local_key();
-        self.set_peer_id();
-        let transport = self.get_transport();
-        let behaviour = self.get_behaviour(Some(Network::Kusama));
-        self.set_swarm(Some(Network::Kusama), transport, behaviour);
-        self
-
+    fn new(network: Option<Network>) -> Self {
+        let local_key = Keypair::generate_ed25519();
+        let local_peer_id = PeerId::from(local_key.public());
+        let transport = Self::get_transport(&local_key, &local_peer_id);
+        let net = Network::Kusama;
+        let behaviour = Self::get_behaviour(&local_key, &local_peer_id, Some(&net));
+        LookupClient {
+            local_key: local_key,
+            local_peer_id: local_peer_id,
+            network: Vec::from([net]),
+            swarm: Self::get_swarm(local_peer_id, Some(Network::Kusama), transport, behaviour)
+        }
     }
 
-    fn set_swarm(self: &mut Self, network: Option<Network>, transport: Boxed<(PeerId, StreamMuxerBox)>,behaviour: LookupBehaviour) -> &Self {
-        let mut swarm = SwarmBuilder::new(transport, behaviour, self.local_peer_id)
+    fn get_swarm(local_peer_id: PeerId, network: Option<Network>, transport: Boxed<(PeerId, StreamMuxerBox)>,behaviour: LookupBehaviour) -> Swarm<LookupBehaviour> {
+        let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
         .executor(Box::new(|fut| {
             // async_std::task::spawn(fut);
         }))
@@ -120,18 +125,11 @@ impl LookupClient {
                 swarm.behaviour_mut().kademlia.add_address(&peer_id, addr);
             }
         }
-        self.swarm = swarm;
-        self
+        swarm
     }
-
-    fn set_peer_id(self: &mut Self) {
-        self.local_peer_id = PeerId::from(&self.local_key.public());
-    }
-    fn set_local_key(self: &mut Self) {
-        self.local_key = Keypair::generate_ed25519();
-    }
-    fn get_transport(self: &mut Self) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
-        let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(self.local_peer_id);
+    fn get_transport(local_key: &Keypair, local_peer_id: &PeerId) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
+        let peer_id = local_peer_id.clone();
+        let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(peer_id);
         // self.relay = relay_client;
                 // Reference: https://github.com/mxinden/libp2p-lookup/blob/41f4e2fc498b44bcdd2d4b381363dea0b740336b/src/main.rs#L136-L175
                 let transport = OrTransport::new(
@@ -144,7 +142,7 @@ impl LookupClient {
         
                 let authentication_config = {
                     let noise_keypair_spec = noise::Keypair::<noise::X25519Spec>::new()
-                        .into_authentic(&self.local_key)
+                        .into_authentic(&local_key)
                         .unwrap();
         
                     noise::NoiseConfig::xx(noise_keypair_spec).into_authenticated()
@@ -173,15 +171,15 @@ impl LookupClient {
                     .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
                     .boxed()
     }
-    fn get_behaviour(self: &Self, network: Option<Network>) -> LookupBehaviour {
-
+    fn get_behaviour(local_key: &Keypair, local_peer_id: &PeerId, network: Option<&Network>) -> LookupBehaviour {
+        let peer_id = local_peer_id.clone();
         // Create a Kademlia behaviour.
-        let store = MemoryStore::new(self.local_peer_id);
+        let store = MemoryStore::new(peer_id);
         let mut kademlia_config = KademliaConfig::default();
         if let Some(protocol_name) = network.clone().map(|n| n.protocol()).flatten() {
             kademlia_config.set_protocol_names(vec![protocol_name.into_bytes().into()]);
         }
-        let kademlia = Kademlia::with_config(self.local_peer_id, store, kademlia_config);
+        let kademlia = Kademlia::with_config(peer_id, store, kademlia_config);
 
         let ping = ping::Behaviour::new(ping::Config::new());
 
@@ -189,7 +187,7 @@ impl LookupClient {
             "substrate-node/v2.0.0-e3245d49d-x86_64-linux-gnu (unknown)".to_string();
         let proto_version = "/substrate/1.0".to_string();
         let identify = identify::Behaviour::new(
-            identify::Config::new(proto_version, self.local_key.public())
+            identify::Config::new(proto_version, local_key.public())
                 .with_agent_version(user_agent),
         );
 
@@ -204,5 +202,6 @@ impl LookupClient {
 
 
 fn main() {
-    println!("Hello, world!");
+    let network = Some(Network::Kusama);
+    let lookup = LookupClient::new(network);
 }
