@@ -1,5 +1,8 @@
 use std::io;
-use futures::executor::block_on;
+use futures::{
+    executor::block_on,
+    stream::StreamExt
+};
 use libp2p::relay::v2::client::Client;
 use std::str::FromStr;
 use std::time::Duration;
@@ -8,7 +11,10 @@ use libp2p::identity::Keypair;
 use libp2p::kad::{
     record::store::MemoryStore,
     Kademlia,
-    KademliaConfig
+    KademliaConfig,
+    KademliaEvent,
+    QueryResult,
+    GetClosestPeersOk
 };
 use libp2p::relay::v2::client::transport::ClientTransport;
 use libp2p::{
@@ -18,6 +24,7 @@ use libp2p::{
     swarm::{
         self,
         SwarmBuilder,
+        SwarmEvent,
         NetworkBehaviour
     },
     NetworkBehaviour,
@@ -42,15 +49,13 @@ use libp2p::core::{
     upgrade
 };
 use crate::core::muxing::StreamMuxerBox;
+use thiserror::Error;
 
 
 pub struct LookupClient {
     local_key: Keypair,
     local_peer_id: PeerId,
     network: Vec<Network>,
-    // behaviour: LookupBehaviour,
-    // relay: relay::client::Client,
-    // transport: OrTransport<ClientTransport, GenDnsConfig<GenTcpTransport<Tcp>, GenericConnection, GenericConnectionProvider<AsyncStdRuntime>>>,
     swarm: Swarm<LookupBehaviour>
 }
 
@@ -63,10 +68,30 @@ struct LookupBehaviour {
     keep_alive: swarm::keep_alive::Behaviour,
 }
 
+struct Peer {
+    peer_id: PeerId,
+    protocol_version: String,
+    agent_version: String,
+    listen_addrs: Vec<Multiaddr>,
+    protocols: Vec<String>,
+    observed_addr: Multiaddr,
+}
+
 #[derive(Debug, Clone)]
 enum Network {
     Kusama
 }
+
+#[derive(Debug, Error)]
+enum NetworkError {
+    #[error("Request Timeout")]
+    Timeout,
+    #[error("Dial failed")]
+    Dial,
+    #[error("Resource not found")]
+    NotFound
+}
+
 
 impl FromStr for Network {
     type Err = String;
@@ -204,9 +229,58 @@ impl LookupClient {
             keep_alive: swarm::keep_alive::Behaviour,
         }
     }
+    async fn identify(self: &Self, peer: PeerId) -> Result<Peer, NetworkError> {
+        Err(NetworkError::Timeout)
+    }
+    async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
+        self.swarm.behaviour_mut().kademlia.get_closest_peers(peer);
+        loop {
+            match self.swarm.next().await.expect("Infinite Stream.") {
+                SwarmEvent::ConnectionEstablished {
+                    peer_id,
+                    num_established,
+                    ..
+                } => {
+                    assert_eq!(Into::<u32>::into(num_established), 1);
+                    if peer_id == peer {
+                        return self.identify(peer).await;
+                    }
+                }
+                SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
+                    KademliaEvent::OutboundQueryCompleted {
+                        result: QueryResult::Bootstrap(_),
+                        ..
+                    },
+                )) => {
+                    panic!("Unexpected bootstrap.");
+                }
+                SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
+                    KademliaEvent::OutboundQueryCompleted {
+                        result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { peers, .. })),
+                        ..
+                    },
+                )) => {
+                    if !peers.contains(&peer) {
+                        return Err(NetworkError::NotFound);
+                    }
+                    if !Swarm::is_connected(&self.swarm, &peer) {
+                        // TODO: Kademlia might not be caching the address of the peer.
+                        Swarm::dial(&mut self.swarm, peer).unwrap();
+                        return self.identify(peer).await;
+                    }
+                }
+                _ => {}
+            }
+        }
+
+    }
 }
 
 
 fn main() {
-    let lookup = LookupClient::new(Network::Kusama);
+    println!("Starting Node");
+    let mut lookup = LookupClient::new(Network::Kusama);
+    let peer_query = lookup.local_peer_id.clone();
+    lookup.dht(peer_query);
+    lookup.dht(peer_query);
 }
