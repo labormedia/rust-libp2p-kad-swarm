@@ -104,12 +104,12 @@ impl Network {
 }
 
 impl LookupClient {
-    fn new(_network: Option<Network>) -> Self {
+    fn new(net: Network) -> Self {
         let local_key = Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
         let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(local_peer_id);
         let transport = Self::get_transport(&local_key, &local_peer_id, relay_transport);
-        let net = Network::Kusama;
+        // let net = Network::Kusama;
         let behaviour = Self::get_behaviour(&local_key, &local_peer_id, Some(&net), relay_client);
         LookupClient {
             local_key: local_key,
@@ -208,6 +208,5 @@ impl LookupClient {
 
 
 fn main() {
-    let network = Some(Network::Kusama);
-    let lookup = LookupClient::new(network);
+    let lookup = LookupClient::new(Network::Kusama);
 }
