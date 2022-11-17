@@ -10,3 +10,4 @@ edition = "2021"
 libp2p = { version = "0.49.0", default-features = false, features = ["dns", "async-std", "noise", "tcp", "yamux", "identify", "kad", "ping", "mplex", "relay"] }
 futures = "0.3.25"
 thiserror = "1"
+async-std = { version = "1.12.0", features = ["attributes"] }

@@ -1,13 +1,12 @@
 use std::io;
+use futures::{TryFutureExt, FutureExt};
 use futures::{
     executor::block_on,
     stream::StreamExt
 };
 use libp2p::relay::v2::client::Client;
-use std::str::FromStr;
 use std::time::Duration;
 use libp2p::identity::Keypair;
-// use libp2p::core;
 use libp2p::kad::{
     record::store::MemoryStore,
     Kademlia,
@@ -50,6 +49,7 @@ use libp2p::core::{
 };
 use crate::core::muxing::StreamMuxerBox;
 use thiserror::Error;
+use std::str::FromStr;
 
 
 pub struct LookupClient {
@@ -108,14 +108,14 @@ impl Network {
     fn bootnodes(&self) -> Vec<(Multiaddr, PeerId)> {
         match self {
             Network::Kusama => vec![
-                ("/dns/p2p.cc3-0.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWDgtynm4S9M3m6ZZhXYu2RrWKdvkCSScc25xKDVSg1Sjd").unwrap()),
-                ("/dns/p2p.cc3-1.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWNpGriWPmf621Lza9UWU9eLLBdCFaErf6d4HSK7Bcqnv4").unwrap()),
-                ("/dns/p2p.cc3-2.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWLmLiB4AenmN2g2mHbhNXbUcNiGi99sAkSk1kAQedp8uE").unwrap()),
-                ("/dns/p2p.cc3-3.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWEGHw84b4hfvXEfyq4XWEmWCbRGuHMHQMpby4BAtZ4xJf").unwrap()),
-                ("/dns/p2p.cc3-4.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWF9KDPRMN8WpeyXhEeURZGP8Dmo7go1tDqi7hTYpxV9uW").unwrap()),
-                ("/dns/p2p.cc3-5.kusama.network/tcp/30100".parse().unwrap(), FromStr::from_str("12D3KooWDiwMeqzvgWNreS9sV1HW3pZv1PA7QGA7HUCo7FzN5gcA").unwrap()),
-                ("/dns/kusama-bootnode-0.paritytech.net/tcp/30333".parse().unwrap(), FromStr::from_str("12D3KooWSueCPH3puP2PcvqPJdNaDNF3jMZjtJtDiSy35pWrbt5h").unwrap()),
-                ("/dns/kusama-bootnode-1.paritytech.net/tcp/30333".parse().unwrap(), FromStr::from_str("12D3KooWQKqane1SqWJNWMQkbia9qiMWXkcHtAdfW5eVF8hbwEDw").unwrap())
+                ("/dns/p2p.cc3-0.kusama.network/tcp/30100".parse().unwrap(), PeerId::from_str("12D3KooWDgtynm4S9M3m6ZZhXYu2RrWKdvkCSScc25xKDVSg1Sjd").unwrap()),
+                ("/dns/p2p.cc3-1.kusama.network/tcp/30100".parse().unwrap(), PeerId::from_str("12D3KooWNpGriWPmf621Lza9UWU9eLLBdCFaErf6d4HSK7Bcqnv4").unwrap()),
+                ("/dns/p2p.cc3-2.kusama.network/tcp/30100".parse().unwrap(), PeerId::from_str("12D3KooWLmLiB4AenmN2g2mHbhNXbUcNiGi99sAkSk1kAQedp8uE").unwrap()),
+                ("/dns/p2p.cc3-3.kusama.network/tcp/30100".parse().unwrap(), PeerId::from_str("12D3KooWEGHw84b4hfvXEfyq4XWEmWCbRGuHMHQMpby4BAtZ4xJf").unwrap()),
+                ("/dns/p2p.cc3-4.kusama.network/tcp/30100".parse().unwrap(), PeerId::from_str("12D3KooWF9KDPRMN8WpeyXhEeURZGP8Dmo7go1tDqi7hTYpxV9uW").unwrap()),
+                ("/dns/p2p.cc3-5.kusama.network/tcp/30100".parse().unwrap(), PeerId::from_str("12D3KooWDiwMeqzvgWNreS9sV1HW3pZv1PA7QGA7HUCo7FzN5gcA").unwrap()),
+                ("/dns/kusama-bootnode-0.paritytech.net/tcp/30333".parse().unwrap(), PeerId::from_str("12D3KooWSueCPH3puP2PcvqPJdNaDNF3jMZjtJtDiSy35pWrbt5h").unwrap()),
+                ("/dns/kusama-bootnode-1.paritytech.net/tcp/30333".parse().unwrap(), PeerId::from_str("12D3KooWQKqane1SqWJNWMQkbia9qiMWXkcHtAdfW5eVF8hbwEDw").unwrap())
             ]
         }
 
@@ -197,7 +197,7 @@ impl LookupClient {
             .upgrade(upgrade::Version::V1)
             .authenticate(authentication_config)
             .multiplex(multiplexing_config)
-            .timeout(Duration::from_secs(20))
+            .timeout(Duration::from_secs(1000))
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
             .boxed()
     }
@@ -241,6 +241,7 @@ impl LookupClient {
                     num_established,
                     ..
                 } => {
+                    println!("Connection stablished");
                     assert_eq!(Into::<u32>::into(num_established), 1);
                     if peer_id == peer {
                         return self.identify(peer).await;
@@ -260,6 +261,7 @@ impl LookupClient {
                         ..
                     },
                 )) => {
+                    println!("Result?");
                     if !peers.contains(&peer) {
                         return Err(NetworkError::NotFound);
                     }
@@ -269,18 +271,32 @@ impl LookupClient {
                         return self.identify(peer).await;
                     }
                 }
-                _ => {}
+                _ => { 
+                    Duration::from_secs(2000);
+                    println!("await");
+                    () 
+                }
             }
         }
 
     }
 }
 
-
-fn main() {
-    println!("Starting Node");
+#[async_std::main]
+async fn main() {
+    println!("Starting Session");
     let mut lookup = LookupClient::new(Network::Kusama);
-    let peer_query = lookup.local_peer_id.clone();
-    lookup.dht(peer_query);
-    lookup.dht(peer_query);
+    let peer_query = PeerId::from_str("12D3KooWQKqane1SqWJNWMQkbia9qiMWXkcHtAdfW5eVF8hbwEDw").unwrap();
+    let a = match lookup.dht(peer_query).await {
+        Ok(peer) => {
+            println!("Lookup for peer with id {:?} succeeded.", peer.peer_id);
+            // println!("\n{}", peer);
+        },
+        Err(e) => {
+            println!("Lookup failed: {:?}.", e);
+            std::process::exit(1);
+        }
+    };
+    println!("Ending Session.")
+    // let b = lookup.dht(peer_query).await.unwrap();
 }
