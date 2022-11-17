@@ -134,7 +134,6 @@ impl LookupClient {
         let local_peer_id = PeerId::from(local_key.public());
         let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(local_peer_id);
         let transport = Self::get_transport(&local_key, &local_peer_id, relay_transport);
-        // let net = Network::Kusama;
         let behaviour = Self::get_behaviour(&local_key, &local_peer_id, Some(&net), relay_client);
         LookupClient {
             local_key: local_key,
@@ -147,7 +146,7 @@ impl LookupClient {
     fn build_swarm(local_peer_id: PeerId, network: Option<Network>, transport: Boxed<(PeerId, StreamMuxerBox)>,behaviour: LookupBehaviour) -> Swarm<LookupBehaviour> {
         let mut swarm = SwarmBuilder::new(transport, behaviour, local_peer_id)
         .executor(Box::new(|fut| {
-            // async_std::task::spawn(fut);
+            async_std::task::spawn(fut);
         }))
         .build();
 
@@ -230,7 +229,8 @@ impl LookupClient {
         }
     }
     async fn identify(self: &Self, peer: PeerId) -> Result<Peer, NetworkError> {
-        Err(NetworkError::Timeout)
+        println!("");
+        Err(NetworkError::Dial)
     }
     async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
         self.swarm.behaviour_mut().kademlia.get_closest_peers(peer);
@@ -241,7 +241,7 @@ impl LookupClient {
                     num_established,
                     ..
                 } => {
-                    println!("Connection stablished");
+                    println!("Connection established");
                     assert_eq!(Into::<u32>::into(num_established), 1);
                     if peer_id == peer {
                         return self.identify(peer).await;
@@ -261,7 +261,6 @@ impl LookupClient {
                         ..
                     },
                 )) => {
-                    println!("Result?");
                     if !peers.contains(&peer) {
                         return Err(NetworkError::NotFound);
                     }
@@ -272,8 +271,6 @@ impl LookupClient {
                     }
                 }
                 _ => { 
-                    Duration::from_secs(2000);
-                    println!("await");
                     () 
                 }
             }
