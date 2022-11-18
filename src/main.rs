@@ -14,10 +14,7 @@ use libp2p::kad::{
     record::store::MemoryStore,
     Kademlia,
     KademliaConfig,
-    KademliaEvent::{
-        self,
-        RoutingUpdated,
-    },
+    KademliaEvent,
     QueryResult,
     GetClosestPeersOk
 };
@@ -351,22 +348,19 @@ async fn main() {
         Ok(peer) => {
             if lookup.is_connected(&peer) {
                 println!("{:?} seems connected.", &peer.peer_id);
-                // let dialed = lookup.dial(&a).unwrap();
-                // println!("Dialed : {:?}", dialed);
             } else {
                 println!("Peer not connected.")
             }
             Ok(peer)
         }
         Err(e) => {
-            println!("Repeating query");
+            println!("{:?} Repeating query",e);
             lookup.dht(peer_query).await
         }
     };
 
-    let b = a.unwrap();
-
-    println!("Found {:?} {:?}", &b.peer_id, &b.listen_addrs);
+    let b = &a.unwrap();
+    println!("Found {:?} {:?}", b.peer_id, b.listen_addrs);
 
     println!("Ending Session.")
 }
