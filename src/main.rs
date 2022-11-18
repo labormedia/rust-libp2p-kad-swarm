@@ -1,8 +1,11 @@
+use std::borrow::BorrowMut;
 use std::io;
-use futures::{TryFutureExt, FutureExt};
+// use futures::{TryFutureExt, FutureExt};
 use futures::{
     executor::block_on,
-    stream::StreamExt
+    stream::{
+        StreamExt,
+    },
 };
 use libp2p::relay::v2::client::Client;
 use std::time::Duration;
@@ -89,7 +92,9 @@ enum NetworkError {
     #[error("Dial failed")]
     Dial,
     #[error("Resource not found")]
-    NotFound
+    NotFound,
+    #[error("No Peers")]
+    NoPeers,
 }
 
 
@@ -130,16 +135,28 @@ impl Network {
 
 impl LookupClient {
     fn new(net: Network) -> Self {
-        let local_key = Keypair::generate_ed25519();
+        // let mut pkcs8_der = std::fs::read("../rsa-keys-with-openssl/private.pk8").unwrap();
+        let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
+        let expected_peer_id =
+            PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
+
+        let encoded = base64::decode(base_64_encoded).unwrap();
+
+        let local_key = Keypair::from_protobuf_encoding(&encoded).unwrap();
+        // let local_key = Keypair::from_pkcs8(&mut pkcs8_der).unwrap();
+        // let local_key = Keypair::generate_ed25519();
         let local_peer_id = PeerId::from(local_key.public());
         let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(local_peer_id);
         let transport = Self::get_transport(&local_key, &local_peer_id, relay_transport);
         let behaviour = Self::get_behaviour(&local_key, &local_peer_id, Some(&net), relay_client);
+        let mut swarm = Self::build_swarm(local_peer_id, Some(Network::Kusama), transport, behaviour);
+        swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
+        let network = Vec::from([net]);
         LookupClient {
             local_key: local_key,
             local_peer_id: local_peer_id,
-            network: Vec::from([net]),
-            swarm: Self::build_swarm(local_peer_id, Some(Network::Kusama), transport, behaviour)
+            network: network,
+            swarm: swarm,
         }
     }
 
@@ -158,8 +175,6 @@ impl LookupClient {
         swarm
     }
     fn get_transport(local_key: &Keypair, local_peer_id: &PeerId, relay_transport: ClientTransport) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
-        let peer_id = local_peer_id.clone();
-        // let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(peer_id);
         // Reference: https://github.com/mxinden/libp2p-lookup/blob/41f4e2fc498b44bcdd2d4b381363dea0b740336b/src/main.rs#L136-L175
         let transport = OrTransport::new(
             relay_transport,
@@ -228,11 +243,38 @@ impl LookupClient {
             keep_alive: swarm::keep_alive::Behaviour,
         }
     }
-    async fn identify(self: &Self, peer: PeerId) -> Result<Peer, NetworkError> {
-        println!("");
-        Err(NetworkError::Dial)
+    async fn identify(self: &mut Self, peer: PeerId) -> Result<Peer, NetworkError> {
+        loop {
+            if let SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
+                identify::Event::Received {
+                    peer_id,
+                    info:
+                        identify::Info {
+                            protocol_version,
+                            agent_version,
+                            listen_addrs,
+                            protocols,
+                            observed_addr,
+                            ..
+                        },
+                },
+            )) = self.swarm.next().await.expect("Infinite Stream.")
+            {
+                if peer_id == peer {
+                    return Ok(Peer {
+                        peer_id,
+                        protocol_version,
+                        agent_version,
+                        listen_addrs,
+                        protocols,
+                        observed_addr,
+                    });
+                }
+            }
+        }
     }
     async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
+        type DynFuture = Box<dyn futures::future::Future<Output = Result<Peer, NetworkError>>>;
         self.swarm.behaviour_mut().kademlia.get_closest_peers(peer);
         loop {
             match self.swarm.next().await.expect("Infinite Stream.") {
@@ -241,12 +283,13 @@ impl LookupClient {
                     num_established,
                     ..
                 } => {
-                    println!("Connection established");
-                    assert_eq!(Into::<u32>::into(num_established), 1);
+                    println!("Connection established {:?}", peer_id);
+                    assert_ne!(Into::<u32>::into(num_established), 0);
                     if peer_id == peer {
+                        self.swarm.behaviour_mut().kademlia.borrow_mut().addresses_of_peer(&peer);
                         return self.identify(peer).await;
                     }
-                }
+                },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
                     KademliaEvent::OutboundQueryCompleted {
                         result: QueryResult::Bootstrap(_),
@@ -254,28 +297,44 @@ impl LookupClient {
                     },
                 )) => {
                     panic!("Unexpected bootstrap.");
-                }
+                },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
                     KademliaEvent::OutboundQueryCompleted {
                         result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { peers, .. })),
                         ..
                     },
                 )) => {
-                    if !peers.contains(&peer) {
-                        return Err(NetworkError::NotFound);
+                    let num_peers = &peers.len();
+                    if num_peers > &0 {
+                        for addr in peers {
+                            if addr == peer {
+                                println!("Eureka! {:?} ", addr);
+                                return self.identify(peer).await
+                            } else {                                
+                                println!("Adding {:?} to kademlia addresses list.", addr);
+                                if let Ok(p) = self.identify(addr).await {
+                                    println!("{:?}", &p.observed_addr);
+                                    self.swarm.behaviour_mut().kademlia.borrow_mut().add_address(&p.peer_id, p.observed_addr);
+                                }
+                                return Err(NetworkError::Timeout)
+                            }
+                            
+                        };
                     }
-                    if !Swarm::is_connected(&self.swarm, &peer) {
-                        // TODO: Kademlia might not be caching the address of the peer.
-                        Swarm::dial(&mut self.swarm, peer).unwrap();
-                        return self.identify(peer).await;
-                    }
-                }
-                _ => { 
-                    () 
-                }
+                    return Err(NetworkError::NoPeers) 
+                },
+                SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+                _ => {},
             }
         }
 
+    }
+    fn dial(self: &mut Self, peer: &Peer) -> Result<(), swarm::DialError> {
+        println!("Dialing...");
+        self.swarm.dial(peer.peer_id)
+    }
+    fn is_connected(self: &Self, peer: &Peer) -> bool {
+        if Swarm::is_connected(&self.swarm, &peer.peer_id) { true } else { false }
     }
 }
 
@@ -283,17 +342,22 @@ impl LookupClient {
 async fn main() {
     println!("Starting Session");
     let mut lookup = LookupClient::new(Network::Kusama);
-    let peer_query = PeerId::from_str("12D3KooWQKqane1SqWJNWMQkbia9qiMWXkcHtAdfW5eVF8hbwEDw").unwrap();
-    let a = match lookup.dht(peer_query).await {
-        Ok(peer) => {
-            println!("Lookup for peer with id {:?} succeeded.", peer.peer_id);
-            // println!("\n{}", peer);
-        },
-        Err(e) => {
-            println!("Lookup failed: {:?}.", e);
-            std::process::exit(1);
+    let peer_query = PeerId::from_str("12D3KooWRtUUpNzH56YT8wWYoCJoTP1FH2Kq2CCY8PYxcHG1XjUc").unwrap();
+    let b = if let Ok(a) = lookup.dht(peer_query).await {
+        if lookup.is_connected(&a) {
+            println!("{:?} seems connected. Dialing.", &a.peer_id);
+            // let dialed = lookup.dial(&a).unwrap();
+            // println!("Dialed : {:?}", dialed);
+        } else {
+            println!("Peer not connected. Dial suspended.")
         }
+        a
+    } else {
+        println!("Repeating query");
+        lookup.dht(peer_query).await.unwrap()
     };
+
+    println!("Found {:?} {:?}", &b.peer_id, &b.listen_addrs);
+
     println!("Ending Session.")
-    // let b = lookup.dht(peer_query).await.unwrap();
 }
