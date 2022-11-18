@@ -134,17 +134,7 @@ impl Network {
 }
 
 impl LookupClient {
-    fn new(net: Network) -> Self {
-        // let mut pkcs8_der = std::fs::read("../rsa-keys-with-openssl/private.pk8").unwrap();
-        let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
-        let expected_peer_id =
-            PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
-
-        let encoded = base64::decode(base_64_encoded).unwrap();
-
-        let local_key = Keypair::from_protobuf_encoding(&encoded).unwrap();
-        // let local_key = Keypair::from_pkcs8(&mut pkcs8_der).unwrap();
-        // let local_key = Keypair::generate_ed25519();
+    fn generate(local_key: Keypair, net: Network) -> Self {
         let local_peer_id = PeerId::from(local_key.public());
         let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(local_peer_id);
         let transport = Self::get_transport(&local_key, &local_peer_id, relay_transport);
@@ -158,6 +148,21 @@ impl LookupClient {
             network,
             swarm,
         }
+    }
+    // TODO: trait implementations for multiple key sources.
+    fn from_base64(base64_string: &str, net: Network) -> Self {
+        // let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
+        // let expected_peer_id = PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
+        let encoded = base64::decode(base64_string).unwrap();
+        Self::generate(Keypair::from_protobuf_encoding(&encoded).unwrap(), net)
+    }
+    fn from_pkcs8_file(file_path: &str, net: Network) -> Self {
+        let mut pkcs8_der = std::fs::read(file_path).unwrap();
+        Self::generate(Keypair::rsa_from_pkcs8(&mut pkcs8_der).unwrap(), net)
+    }
+    fn new(net: Network) -> Self {
+        let local_key = Keypair::generate_ed25519();
+        Self::generate(local_key, net)
     }
 
     fn build_swarm(local_peer_id: PeerId, network: Option<Network>, transport: Boxed<(PeerId, StreamMuxerBox)>,behaviour: LookupBehaviour) -> Swarm<LookupBehaviour> {
@@ -359,7 +364,11 @@ async fn main() {
         }
     };
 
-    let b = &a.unwrap();
+    let b = match a {
+        Ok(peer) => peer,
+        Err(e) => panic!("{:?}",e)
+        
+    };
     println!("Found {:?} {:?}", b.peer_id, b.listen_addrs);
 
     println!("Ending Session.")
