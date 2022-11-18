@@ -14,7 +14,10 @@ use libp2p::kad::{
     record::store::MemoryStore,
     Kademlia,
     KademliaConfig,
-    KademliaEvent,
+    KademliaEvent::{
+        self,
+        RoutingUpdated,
+    },
     QueryResult,
     GetClosestPeersOk
 };
@@ -153,10 +156,10 @@ impl LookupClient {
         swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap()).unwrap();
         let network = Vec::from([net]);
         LookupClient {
-            local_key: local_key,
-            local_peer_id: local_peer_id,
-            network: network,
-            swarm: swarm,
+            local_key,
+            local_peer_id,
+            network,
+            swarm,
         }
     }
 
@@ -186,7 +189,7 @@ impl LookupClient {
 
         let authentication_config = {
             let noise_keypair_spec = noise::Keypair::<noise::X25519Spec>::new()
-                .into_authentic(&local_key)
+                .into_authentic(local_key)
                 .unwrap();
 
             noise::NoiseConfig::xx(noise_keypair_spec).into_authenticated()
@@ -216,11 +219,11 @@ impl LookupClient {
             .boxed()
     }
     fn get_behaviour(local_key: &Keypair, local_peer_id: &PeerId, network: Option<&Network>, relay_client: Client) -> LookupBehaviour {
-        let peer_id = local_peer_id.clone();
+        let peer_id = *local_peer_id;
         // Create a Kademlia behaviour.
         let store = MemoryStore::new(peer_id);
         let mut kademlia_config = KademliaConfig::default();
-        if let Some(protocol_name) = network.clone().map(|n| n.protocol()).flatten() {
+        if let Some(protocol_name) = network.and_then(|n| n.protocol()) {
             kademlia_config.set_protocol_names(vec![protocol_name.into_bytes().into()]);
         }
         let kademlia = Kademlia::with_config(peer_id, store, kademlia_config);
@@ -243,36 +246,6 @@ impl LookupClient {
             keep_alive: swarm::keep_alive::Behaviour,
         }
     }
-    async fn identify(self: &mut Self, peer: PeerId) -> Result<Peer, NetworkError> {
-        loop {
-            if let SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
-                identify::Event::Received {
-                    peer_id,
-                    info:
-                        identify::Info {
-                            protocol_version,
-                            agent_version,
-                            listen_addrs,
-                            protocols,
-                            observed_addr,
-                            ..
-                        },
-                },
-            )) = self.swarm.next().await.expect("Infinite Stream.")
-            {
-                if peer_id == peer {
-                    return Ok(Peer {
-                        peer_id,
-                        protocol_version,
-                        agent_version,
-                        listen_addrs,
-                        protocols,
-                        observed_addr,
-                    });
-                }
-            }
-        }
-    }
     async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
         type DynFuture = Box<dyn futures::future::Future<Output = Result<Peer, NetworkError>>>;
         self.swarm.behaviour_mut().kademlia.get_closest_peers(peer);
@@ -287,8 +260,16 @@ impl LookupClient {
                     assert_ne!(Into::<u32>::into(num_established), 0);
                     if peer_id == peer {
                         self.swarm.behaviour_mut().kademlia.borrow_mut().addresses_of_peer(&peer);
-                        return self.identify(peer).await;
                     }
+                },
+                SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
+                    KademliaEvent::RoutingUpdated { 
+                        peer, 
+                        is_new_peer, 
+                        addresses, 
+                        bucket_range, 
+                        old_peer })) => {
+                        println!("{:?} added in the Routing Table.", peer);
                 },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
                     KademliaEvent::OutboundQueryCompleted {
@@ -309,21 +290,44 @@ impl LookupClient {
                         for addr in peers {
                             if addr == peer {
                                 println!("Eureka! {:?} ", addr);
-                                return self.identify(peer).await
-                            } else {                                
-                                println!("Adding {:?} to kademlia addresses list.", addr);
-                                if let Ok(p) = self.identify(addr).await {
-                                    println!("{:?}", &p.observed_addr);
-                                    self.swarm.behaviour_mut().kademlia.borrow_mut().add_address(&p.peer_id, p.observed_addr);
-                                }
-                                return Err(NetworkError::Timeout)
                             }
-                            
                         };
+                        return Err(NetworkError::Timeout) ;
                     }
                     return Err(NetworkError::NoPeers) 
                 },
                 SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
+                SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
+                    identify::Event::Received {
+                        peer_id,
+                        info:
+                            identify::Info {
+                                protocol_version,
+                                agent_version,
+                                listen_addrs,
+                                protocols,
+                                observed_addr,
+                                ..
+                            },
+                    },
+                )) => {
+                    let addr = Peer {
+                        peer_id,
+                        protocol_version,
+                        agent_version,
+                        listen_addrs,
+                        protocols,
+                        observed_addr,
+                    };
+                    if peer_id == peer {
+                        return Ok(addr);
+                    } else {
+                        println!("Adding {:?} to kademlia addresses list.", &addr.peer_id);
+                        println!("Listened addresses : {:?}", &addr.listen_addrs);
+                        let listen_addrs = addr.listen_addrs[0].clone();
+                        self.swarm.behaviour_mut().kademlia.borrow_mut().add_address(&addr.peer_id,listen_addrs );
+                    }
+                }
                 _ => {},
             }
         }
@@ -334,7 +338,7 @@ impl LookupClient {
         self.swarm.dial(peer.peer_id)
     }
     fn is_connected(self: &Self, peer: &Peer) -> bool {
-        if Swarm::is_connected(&self.swarm, &peer.peer_id) { true } else { false }
+        Swarm::is_connected(&self.swarm, &peer.peer_id)
     }
 }
 
@@ -343,19 +347,24 @@ async fn main() {
     println!("Starting Session");
     let mut lookup = LookupClient::new(Network::Kusama);
     let peer_query = PeerId::from_str("12D3KooWRtUUpNzH56YT8wWYoCJoTP1FH2Kq2CCY8PYxcHG1XjUc").unwrap();
-    let b = if let Ok(a) = lookup.dht(peer_query).await {
-        if lookup.is_connected(&a) {
-            println!("{:?} seems connected. Dialing.", &a.peer_id);
-            // let dialed = lookup.dial(&a).unwrap();
-            // println!("Dialed : {:?}", dialed);
-        } else {
-            println!("Peer not connected. Dial suspended.")
+    let a = match lookup.dht(peer_query).await {
+        Ok(peer) => {
+            if lookup.is_connected(&peer) {
+                println!("{:?} seems connected.", &peer.peer_id);
+                // let dialed = lookup.dial(&a).unwrap();
+                // println!("Dialed : {:?}", dialed);
+            } else {
+                println!("Peer not connected.")
+            }
+            Ok(peer)
         }
-        a
-    } else {
-        println!("Repeating query");
-        lookup.dht(peer_query).await.unwrap()
+        Err(e) => {
+            println!("Repeating query");
+            lookup.dht(peer_query).await
+        }
     };
+
+    let b = a.unwrap();
 
     println!("Found {:?} {:?}", &b.peer_id, &b.listen_addrs);
 
