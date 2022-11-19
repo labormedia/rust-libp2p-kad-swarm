@@ -97,18 +97,6 @@ enum NetworkError {
     NoPeers,
 }
 
-
-impl FromStr for Network {
-    type Err = String;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s {
-            "kusama" => Ok(Self::Kusama),
-            n => Err(format!("Network '{}' not supported.", n)),
-        }
-    }
-}
-
 impl Network {
     fn bootnodes(&self) -> Vec<(Multiaddr, PeerId)> {
         match self {
@@ -347,7 +335,10 @@ impl LookupClient {
 #[async_std::main]
 async fn main() {
     println!("Starting Session");
-    let mut lookup = LookupClient::new(Network::Kusama);
+    let mut lookup = LookupClient::from_base64(
+        "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=", 
+        Network::Kusama
+    );
     let peer_query = PeerId::from_str("12D3KooWRtUUpNzH56YT8wWYoCJoTP1FH2Kq2CCY8PYxcHG1XjUc").unwrap();
     let a = match lookup.dht(peer_query).await {
         Ok(peer) => {
@@ -359,7 +350,7 @@ async fn main() {
             Ok(peer)
         }
         Err(e) => {
-            println!("{:?} Repeating query",e);
+            println!("{:?} Repeating query...",e);
             lookup.dht(peer_query).await
         }
     };
@@ -370,6 +361,5 @@ async fn main() {
         
     };
     println!("Found {:?} {:?}", b.peer_id, b.listen_addrs);
-
     println!("Ending Session.")
 }
