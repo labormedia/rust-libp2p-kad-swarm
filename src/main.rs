@@ -174,17 +174,6 @@ impl LookupClient {
     }
     async fn listen(self: &mut Self) -> Result<core::transport::ListenerId, libp2p::TransportError<io::Error>> {
         self.swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
-        // loop {
-        //     match self.swarm.next().await.expect("Infinite Stream.") {
-        //         _ => {},
-
-        //         SwarmEvent::NewListenAddr { address, .. } => {
-        //             println!("Listening on {:?}", address);
-        //             self.listen_addrs.push(address);
-        //             return self
-        //         },
-        //     }
-        // }
     }
     fn get_transport(local_key: &Keypair, relay_transport: ClientTransport) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
         // Reference: https://github.com/mxinden/libp2p-lookup/blob/41f4e2fc498b44bcdd2d4b381363dea0b740336b/src/main.rs#L136-L175
@@ -272,8 +261,12 @@ impl LookupClient {
                 //     println!("Connection established {:?}", peer_id);
                 //     assert_ne!(Into::<u32>::into(num_established), 0);
                 //     if peer_id == peer {
-                //         return Ok(self.swarm.behaviour_mut().kademlia.borrow_mut().addresses_of_peer(&peer))
+                //         self.swarm.behaviour_mut().kademlia.borrow_mut().addresses_of_peer(&peer);
                 //     }
+                // },
+                // SwarmEvent::NewListenAddr { address, .. } => {
+                //     println!("Listening on {:?}", address);
+                //     self.listen_addrs.push(address);
                 // },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
                     identify::Event::Received {
@@ -393,7 +386,7 @@ async fn main() {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, thread::sleep};
+    use std::{collections::HashMap, thread::sleep, ptr::addr_of};
 
     use libp2p::swarm::DialError;
 
@@ -412,6 +405,7 @@ mod tests {
 
     #[async_std::test]
     async fn local_dial() -> Result<(), swarm::DialError>{
+        let addrs_count = 2; // change this if you want to test another address or you have fewer count of addresses
         let mut node_a = LookupClient::new(Network::Kusama);
         let mut node_b = LookupClient::new(Network::Kusama);
         let node_b = async_std::task::spawn(async move {
@@ -421,12 +415,14 @@ mod tests {
 
                     println!("Listening to address : {:?}", address);
                     node_b.listen_addrs.push(address);
-                    break node_b;
+                    if node_b.listen_addrs.len() > addrs_count {
+                        break node_b;
+                    }
                 };
             };
             addr
         }).await;
         println!("Listening addresses : {:?}", node_b.listen_addrs);
-        node_a.dial(node_b.listen_addrs[0].clone())
+        node_a.dial(node_b.listen_addrs[addrs_count].clone())
     }
 }
