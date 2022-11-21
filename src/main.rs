@@ -426,18 +426,6 @@ mod tests {
             };
             addr
         }).await;
-        let mut node_a = async_std::task::spawn(async move {
-            let _ = node_a.listen().await;
-            let addr = loop {
-                if let SwarmEvent::NewListenAddr { address, .. } = node_a.swarm.select_next_some().await {
-
-                    println!("Listening to address : {:?}", address);
-                    node_a.listen_addrs.push(address);
-                    break node_a;
-                };
-            };
-            addr
-        }).await;
         println!("Listening addresses : {:?}", node_b.listen_addrs);
         node_a.dial(node_b.listen_addrs[0].clone())
     }
