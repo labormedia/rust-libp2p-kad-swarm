@@ -395,6 +395,8 @@ async fn main() {
 mod tests {
     use std::{collections::HashMap, thread::sleep};
 
+    use libp2p::swarm::DialError;
+
     use super::*;
 
     #[test]
@@ -438,38 +440,5 @@ mod tests {
         }).await;
         println!("Listening addresses : {:?}", node_b.listen_addrs);
         node_a.dial(node_b.listen_addrs[0].clone())
-        // node_b.listen();
-        // let mut node_a = LookupClient::new(Network::Kusama);
-        // node_a.listen();
-
-
-
-
-        // let listen_address_a = node_a.listen_addrs[0].clone();
-        // let timer = timer::Timer::new();
-
-        // let guard = timer.schedule_with_delay(
-        //     chrono::Duration::seconds(1),
-        //     || { 
-        //         println!("Hello timer");
-        //     }
-        // );
-        
-        // let mut guard_map: HashMap<i32, Guard>  = HashMap::new();
-        // guard_map.insert(0, guard);
-
-        // loop {
-        //     node_a.dht(node_b.local_peer_id).await;
-        //     sleep(Duration::from_secs(1));
-        //     if node_b.listen_addrs.len() > 0 { 
-        //         let listen_address_b = node_b.listen_addrs[0].clone();
-        //         println!("Dialing {:?}", listen_address_b);
-        //         return node_a.dial(listen_address_b)
-        //     } else {
-        //         println!("No listen address.");
-        //     };
-        // }
-        
-
     }
 }
