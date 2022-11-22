@@ -127,14 +127,14 @@ impl Network {
 }
 
 impl LookupClient {
-    fn generate(local_key: Keypair, net: Network) -> Self {
+    fn builder(local_key: Keypair, net: &Network) -> Self {
         let local_peer_id = PeerId::from(local_key.public());
         println!("Local PeerID : {:?}", local_peer_id);
         let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(local_peer_id);
         let transport = Self::get_transport(&local_key, relay_transport);
         let behaviour = Self::get_behaviour(&local_key, &local_peer_id, Some(&net), relay_client);
-        let swarm = Self::build_swarm(local_peer_id, Some(Network::Kusama), transport, behaviour);
-        let network = Vec::from([net]);
+        let swarm = Self::build_swarm(local_peer_id, Some(net.clone()), transport, behaviour);
+        let network = Vec::from([net.clone()]);
         let listen_addrs: Vec<Multiaddr> = [].to_vec();
         LookupClient {
             local_key,
@@ -145,17 +145,17 @@ impl LookupClient {
         }
     }
     // TODO: trait implementations for multiple key sources.
-    fn from_base64(base64_string: &str, net: Network) -> Self {
+    fn from_base64(base64_string: &str, net: &Network) -> Self {
         let encoded = base64::decode(base64_string).unwrap();
-        Self::generate(Keypair::from_protobuf_encoding(&encoded).unwrap(), net)
+        Self::builder(Keypair::from_protobuf_encoding(&encoded).unwrap(), net)
     }
-    fn from_pkcs8_file(file_path: &str, net: Network) -> Self {
+    fn from_pkcs8_file(file_path: &str, net: &Network) -> Self {
         let mut pkcs8_der = std::fs::read(file_path).unwrap();
-        Self::generate(Keypair::rsa_from_pkcs8(&mut pkcs8_der).unwrap(), net)
+        Self::builder(Keypair::rsa_from_pkcs8(&mut pkcs8_der).unwrap(), net)
     }
-    fn new(net: Network) -> Self {
+    fn new(net: &Network) -> Self {
         let local_key = Keypair::generate_ed25519();
-        Self::generate(local_key, net)
+        Self::builder(local_key, net)
     }
 
     fn build_swarm(local_peer_id: PeerId, network: Option<Network>, transport: Boxed<(PeerId, StreamMuxerBox)>,behaviour: LookupBehaviour) -> Swarm<LookupBehaviour> {
@@ -231,6 +231,7 @@ impl LookupClient {
         let user_agent =
             "substrate-node/v2.0.0-e3245d49d-x86_64-linux-gnu (unknown)".to_string();
         let proto_version = "/substrate/1.0".to_string();
+        // let proto_version = "/ipfs/id/1.0.0".to_string();
         let identify = identify::Behaviour::new(
             identify::Config::new(proto_version, local_key.public())
                 .with_agent_version(user_agent),
@@ -356,7 +357,7 @@ async fn main() {
     println!("Starting Session");
     let mut lookup = LookupClient::from_base64(
         "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=", 
-        Network::Kusama
+        &Network::Kusama
     );
     lookup.listen().await ;
     let peer_query = PeerId::from_str("12D3KooWRtUUpNzH56YT8wWYoCJoTP1FH2Kq2CCY8PYxcHG1XjUc").unwrap();
@@ -398,7 +399,7 @@ mod tests {
             // let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
             // let expected_peer_id = PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
             "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=", 
-            Network::Kusama
+            &Network::Kusama
         );
         assert_eq!(lookup.local_peer_id, PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap())
     }
@@ -406,8 +407,8 @@ mod tests {
     #[async_std::test]
     async fn local_dial() -> Result<(), swarm::DialError>{
         let addrs_count = 2; // change this if you want to test another address or you have fewer count of addresses
-        let mut node_a = LookupClient::new(Network::Kusama);
-        let mut node_b = LookupClient::new(Network::Kusama);
+        let mut node_a = LookupClient::new(&Network::Kusama);
+        let mut node_b = LookupClient::new(&Network::Kusama);
         let node_b = async_std::task::spawn(async move {
             let _ = node_b.listen().await;
             let addr = loop {
@@ -424,5 +425,156 @@ mod tests {
         }).await;
         println!("Listening addresses : {:?}", node_b.listen_addrs);
         node_a.dial(node_b.listen_addrs[addrs_count].clone())
+    }
+
+    #[async_std::test]
+    async fn identify_node() -> Result<(), DialError> {
+        let addrs_count = 0; // change this if you want to test another address or you have fewer count of addresses
+        let net = Network::Kusama;
+        let mut node_a = LookupClient::new(&net);
+        // let transport = libp2p::development_transport(node_a.local_key).await?;
+
+        // // Create a identify network behaviour.
+        // let behaviour = identify::Behaviour::new(identify::Config::new(
+        //     "/ipfs/id/1.0.0".to_string(),
+        //     node_a.local_key.public(),
+        // ));
+  
+        let mut node_a = async_std::task::spawn(async move {
+            let _ = node_a.listen().await;
+            let mut addr = loop {
+                match node_a.swarm.select_next_some().await {
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Listening on {:?}", address);
+                        node_a.listen_addrs.push(address);
+                        if node_a.listen_addrs.len() > addrs_count {
+                            break node_a;
+                        }
+                    },
+                    SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
+                        identify::Event::Received {
+                            peer_id,
+                            info:
+                                identify::Info {
+                                    protocol_version,
+                                    agent_version,
+                                    listen_addrs,
+                                    protocols,
+                                    observed_addr,
+                                    ..
+                                },
+                        },
+                    )) =>  {
+                        let addr = Peer {
+                            peer_id,
+                            protocol_version,
+                            agent_version,
+                            listen_addrs,
+                            protocols,
+                            observed_addr,
+                        };
+                        // if peer_id == node_b.local_peer_id {
+                        //     println!("Found.");
+                        // } else 
+                        {
+                            println!("Adding {:?} to kademlia addresses list.", &addr.peer_id);
+                            println!("Listened addresses : {:?}", &addr.listen_addrs);
+                            let listen_addrs = addr.listen_addrs[0].clone();
+                            node_a.swarm.behaviour_mut().kademlia.borrow_mut().add_address(&addr.peer_id,listen_addrs );
+                        }
+                    },
+                    _ => {},
+                };
+
+            };
+            addr
+        }).await;
+        let result = async_std::task::spawn(async move {
+            println!("Listening addresses : {:?}", node_a.listen_addrs);
+
+            let mut node_b = LookupClient::new(&net);
+            let _ = node_b.listen().await;
+            let _ = node_b.dial(node_a.listen_addrs[addrs_count].clone()).unwrap();
+            loop {
+                match node_b.swarm.select_next_some().await {
+                    // SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
+                    //     identify::Event::Received {
+                    //         peer_id,
+                    //         info:
+                    //             identify::Info {
+                    //                 protocol_version,
+                    //                 agent_version,
+                    //                 listen_addrs,
+                    //                 protocols,
+                    //                 observed_addr,
+                    //                 ..
+                    //             },
+                    //     },
+                    // )) => {}
+                    SwarmEvent::NewListenAddr { address, .. } => {
+                        println!("Listening on {:?}", address);
+                        node_b.listen_addrs.push(address);
+                        // if node_a.listen_addrs.len() > addrs_count {
+                        //     break node_a;
+                        // }
+                        break "TODO".to_string();
+                    },
+                    SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
+                        identify::Event::Sent {
+                            peer_id
+                        },
+                    ))  => {
+                        println!("Sent identify info to {:?}", peer_id);
+                        // break peer_id;
+                    }
+                    SwarmEvent::Behaviour( LookupBehaviourEvent::Identify(identify::Event::Received { peer_id, info })) => {
+                        println!("Received {:?}", info);
+                        // break peer_id;
+                    }
+                    _ => {}
+                }
+            }
+        }).await;
+        println!("Result: {:?}", result);
+        Err(DialError::Aborted)
+        
+        // loop {
+        //     match node_b.swarm.select_next_some().await {
+        //         SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
+        //             identify::Event::Received {
+        //                 peer_id,
+        //                 info:
+        //                     identify::Info {
+        //                         protocol_version,
+        //                         agent_version,
+        //                         listen_addrs,
+        //                         protocols,
+        //                         observed_addr,
+        //                         ..
+        //                     },
+        //             },
+        //         )) => {}
+        //         SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
+        //             identify::Event::Received {
+        //                 peer_id,
+        //                 info:
+        //                     identify::Info {
+        //                         protocol_version,
+        //                         agent_version,
+        //                         listen_addrs,
+        //                         protocols,
+        //                         observed_addr,
+        //                         ..
+        //                     },
+        //             },
+        //         ))  => {
+        //             println!("Sent identify info to {:?}", peer_id)
+        //         }
+        //         SwarmEvent::Behaviour( LookupBehaviourEvent::Identify(identify::Event::Received { info, .. })) => {
+        //             println!("Received {:?}", info)
+        //         }
+        //         _ => {}
+        //     }
+        // };
     }
 }
