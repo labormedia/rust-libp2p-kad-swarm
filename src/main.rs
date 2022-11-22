@@ -497,20 +497,20 @@ mod tests {
             let _ = node_b.dial(node_a.listen_addrs[addrs_count].clone()).unwrap();
             loop {
                 match node_b.swarm.select_next_some().await {
-                    // SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
-                    //     identify::Event::Received {
-                    //         peer_id,
-                    //         info:
-                    //             identify::Info {
-                    //                 protocol_version,
-                    //                 agent_version,
-                    //                 listen_addrs,
-                    //                 protocols,
-                    //                 observed_addr,
-                    //                 ..
-                    //             },
-                    //     },
-                    // )) => {}
+                    SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
+                        identify::Event::Received {
+                            peer_id,
+                            info:
+                                identify::Info {
+                                    protocol_version,
+                                    agent_version,
+                                    listen_addrs,
+                                    protocols,
+                                    observed_addr,
+                                    ..
+                                },
+                        },
+                    )) => { println!("Hello Event")}
                     SwarmEvent::NewListenAddr { address, .. } => {
                         println!("Listening on {:?}", address);
                         node_b.listen_addrs.push(address);
@@ -536,45 +536,6 @@ mod tests {
             }
         }).await;
         println!("Result: {:?}", result);
-        Err(DialError::Aborted)
-        
-        // loop {
-        //     match node_b.swarm.select_next_some().await {
-        //         SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
-        //             identify::Event::Received {
-        //                 peer_id,
-        //                 info:
-        //                     identify::Info {
-        //                         protocol_version,
-        //                         agent_version,
-        //                         listen_addrs,
-        //                         protocols,
-        //                         observed_addr,
-        //                         ..
-        //                     },
-        //             },
-        //         )) => {}
-        //         SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
-        //             identify::Event::Received {
-        //                 peer_id,
-        //                 info:
-        //                     identify::Info {
-        //                         protocol_version,
-        //                         agent_version,
-        //                         listen_addrs,
-        //                         protocols,
-        //                         observed_addr,
-        //                         ..
-        //                     },
-        //             },
-        //         ))  => {
-        //             println!("Sent identify info to {:?}", peer_id)
-        //         }
-        //         SwarmEvent::Behaviour( LookupBehaviourEvent::Identify(identify::Event::Received { info, .. })) => {
-        //             println!("Received {:?}", info)
-        //         }
-        //         _ => {}
-        //     }
-        // };
+        Err(DialError::Aborted) // TODO
     }
 }
