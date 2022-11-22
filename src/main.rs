@@ -453,7 +453,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn identify_node() -> Result<(), DialError> {
+    async fn async_identify() -> Result<(), DialError> {
         println!("again");
         let addrs_count = 0; // change this if you want to test another address or you have fewer count of addresses
         let net = Network::Kusama;
