@@ -7,7 +7,7 @@ use std::str::FromStr;
 async fn main() {
 
     println!("Starting Session");
-    
+
     let mut lookup = LookupClient::from_base64(
         "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=", 
         &Network::Kusama
@@ -23,7 +23,7 @@ async fn main() {
     println!("Found {:?} {:?} {:?}", peer.peer_id, peer.listen_addrs, peer.protocols);
     lookup.dial(&peer).await;
 
-
     println!("Ending Session.");
+    
 }
 
