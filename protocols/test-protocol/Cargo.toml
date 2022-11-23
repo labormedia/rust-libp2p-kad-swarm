@@ -1,6 +1,7 @@
 [package]
 name = "test-protocol"
 authors = ["Diego Correa Tristain <algoritmia@labormedia.cl>"]
+repository = "https://github.com/labormedia/rust-libp2p-kad-swarm"
 version = "0.1.0"
 edition = "2021"
 
