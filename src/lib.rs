@@ -241,7 +241,7 @@ impl LookupClient {
     pub async fn listen(self: &mut Self) -> Result<core::transport::ListenerId, libp2p::TransportError<io::Error>> {
         self.swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
     }
-    pub async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
+    async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
         type DynFuture = Box<dyn futures::future::Future<Output = Result<Peer, NetworkError>>>;
         self.swarm.behaviour_mut().kademlia.get_closest_peers(peer);
         loop {
@@ -340,11 +340,28 @@ impl LookupClient {
         }
 
     }
+    pub async fn dht_query(&mut self, peer_query: PeerId) -> Result<Peer, NetworkError> {
+        match self.dht(peer_query).await {
+            Ok(peer) => {
+                if self.is_connected(&peer.peer_id) {
+                    println!("{:?} seems connected.", &peer.peer_id);
+                } else {
+                    println!("Peer not connected.")
+                }
+                Ok(peer)
+            }
+            Err(e) => {
+                println!("{:?} Repeating query...",e);
+                self.dht(peer_query).await
+            }
+        }
+    }
     pub async fn dial(self: &mut Self, peer_to_dial: &Peer) -> () {
         let address_to_dial = peer_to_dial.listen_addrs[0].clone();
         println!("Dialing...{:?}", address_to_dial);
-        self.swarm.dial(address_to_dial.clone()).unwrap()
+        self.swarm.dial(address_to_dial).unwrap()
     
+        // Thinking if this method should have an event loop or not.
         // loop {
         //     match self.swarm.select_next_some().await {
         //         SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
