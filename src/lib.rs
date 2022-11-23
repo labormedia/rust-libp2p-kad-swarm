@@ -53,6 +53,7 @@ use libp2p::core::{
 use crate::core::muxing::StreamMuxerBox;
 use thiserror::Error;
 use std::str::FromStr;
+#[cfg(feature = "request-response")]
 use libp2p::request_response::*;
 
 

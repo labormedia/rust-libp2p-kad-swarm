@@ -10,9 +10,6 @@ use libp2p::core::{
 use std::io;
 use futures::{prelude::*, AsyncWriteExt};
 
-
-// Simple Ping-Pong Protocol
-
 #[derive(Debug, Clone)]
 struct TestProtocol();
 #[derive(Clone)]
@@ -90,5 +87,14 @@ impl RequestResponseCodec for TestCodec {
         io.close().await?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    #[ignore]
+    fn should_fail() {
+        assert_eq!(1,2)
     }
 }
