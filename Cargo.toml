@@ -1,6 +1,7 @@
 [package]
 name = "rust-libp2p-kad-swarm"
 authors = ["Diego Correa Tristain <algoritmia@labormedia.cl>"]
+repository = "https://github.com/labormedia/rust-libp2p-kad-swarm"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,6 +9,7 @@ edition = "2021"
 
 [dependencies]
 libp2p = { version = "0.49.0", default-features = false, features = ["dns", "async-std", "noise", "tcp", "yamux", "identify", "kad", "ping", "mplex", "relay", "rsa", "request-response"] }
+test-protocol = { version = "0.1.0", path = "protocols/test-protocol" }
 futures = "0.3.25"
 thiserror = "1"
 async-std = { version = "1.12.0", features = ["attributes"] }
