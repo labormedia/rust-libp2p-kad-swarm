@@ -17,13 +17,20 @@ Because of the possible complications, the examples does not consider NAT traver
 
 ## Protocol Test
 Build the library, main binary and examples on both nodes A and B:
+
 `cargo build --examples --release`
 Run the Responder on A:
+
 `$./target/release/examples/responder`
+
 Wait for the [peer id] and [address] confirmation. If you are not sure about the NAT traversal of this address, the fastest try would be to look for a local address alternative which would be visible between both peers. From within the same host, 127.0.0.1 should work out of the box.
+
 Run the requester with the [peer id] and [address] provided by A, on the other node B:
+
 `$./target/release/examples/requester [peerid] [address]`
+
 usage example:
+
 `$./target/release/examples/requester 12D3KooWDEDDufC8NDPXaUoYrhBkGFWSer9ijkfgZpnHpZXTQPF2 /ip4/127.0.0.1/tcp/34431`
 
 Thank you and enjoy!
