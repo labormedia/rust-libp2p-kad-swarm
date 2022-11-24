@@ -2,6 +2,10 @@ use async_trait::async_trait;
 use libp2p::request_response::*;
 use std::io;
 use futures::{prelude::*, AsyncWriteExt};
+use libp2p_core::upgrade::{
+    read_length_prefixed,
+    write_length_prefixed
+};
 
 #[derive(Debug, Clone)]
 pub struct TestProtocol();

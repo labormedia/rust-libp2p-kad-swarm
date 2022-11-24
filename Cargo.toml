@@ -13,6 +13,7 @@ test-protocol = { version = "0.1.0", path = "protocols/test-protocol", optional 
 futures = "0.3.25"
 thiserror = "1"
 async-std = { version = "1.12.0", features = ["attributes"] }
+async-trait = "0.1"
 base64 = "0.13.1"
 timer = "0.2.0"
 chrono = "0.4.23"
