@@ -412,12 +412,39 @@ impl LookupClient {
         self.swarm.behaviour_mut().request_response.send_response(channel, SYNACK("SYNACK".to_string().into_bytes())).unwrap();
     }
     #[cfg(feature="test-protocol")]
-    pub async fn init(self: &mut Self) {
-        let expected_ping = SYN("SYN".to_string().into_bytes());
+    pub async fn add_address(self: &mut Self, peer_id: PeerId, address: Multiaddr) {
+        self.swarm
+            .behaviour_mut()
+            .request_response
+            .borrow_mut()
+            .add_address(&peer_id, address)    
+    }
+    #[cfg(feature="test-protocol")]
+    pub async fn init(self: &mut Self) -> PeerId {
+        let syn = SYN("SYN".to_string().into_bytes());
+        let synack = SYNACK("SYNACK".to_string().into_bytes());
         loop {
             match self.swarm.next().await.expect("Infinite Stream.") {
-                SwarmEvent::NewListenAddr { address, .. } => { println!("New Listen Address : {:?}",address); }
-                _ => {}
+                SwarmEvent::NewListenAddr { address, .. } => { println!("New Listen Address : {:?}",address); },
+                SwarmEvent::Behaviour( LookupBehaviourEvent::RequestResponse(
+                    RequestResponseEvent::Message {
+                        peer,
+                        message:
+                            RequestResponseMessage::Request {
+                                request, channel, ..
+                            },
+                    }
+                    )
+                ) => {
+                    assert_eq!(&request, &syn);
+                    self.swarm
+                        .behaviour_mut()
+                        .request_response
+                        .send_response(channel, synack)
+                        .unwrap();
+                    break peer;
+                },
+                _ => { println!("unknown event")}
             }
         }
     }

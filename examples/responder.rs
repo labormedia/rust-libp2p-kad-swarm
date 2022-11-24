@@ -8,5 +8,5 @@ async fn main() {
     );
     let _ = a.listen().await;
     let request_peer_address = a.init().await;
-    println!("Connection Established : node[{:?}]", request_peer_address);
+    println!("SYN from node[{:?}]", request_peer_address);
 }

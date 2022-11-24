@@ -1,16 +1,23 @@
 use rust_libp2p_kad_swarm as synack_node;
+use libp2p::{
+    PeerId,
+    Multiaddr
+};
 use std::str::FromStr;
 
 #[async_std::main]
 async fn main() {
-    let mut a = synack_node::LookupClient::from_base64(
-        "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=", 
+    let mut a = synack_node::LookupClient::new(
         &synack_node::Network::Kusama
     );
     // a.swarm     // TODO: Add remote address to swarm
+    let expected_peer_id: PeerId = PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
+    let expected_address : Multiaddr = Multiaddr::from_str("/ip4/127.0.0.1/tcp/44259").unwrap();
+    let _ = a.add_address(expected_peer_id, expected_address).await;
+
     let _ = a.listen().await;
-    let expected_peer_id = synack_node::PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
-    a.send_request(expected_peer_id);
+    let _ = a.send_request(expected_peer_id).await;
+    a.init().await;
     // TODO: init the event loop for the protocol
 }
 
