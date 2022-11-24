@@ -1,7 +1,17 @@
 use rust_libp2p_kad_swarm as synack_node;
+use std::str::FromStr;
 
-fn main() {
-    
+#[async_std::main]
+async fn main() {
+    let mut a = synack_node::LookupClient::from_base64(
+        "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=", 
+        &synack_node::Network::Kusama
+    );
+    // a.swarm     // TODO: Add remote address to swarm
+    let _ = a.listen().await;
+    let expected_peer_id = synack_node::PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
+    a.send_request(expected_peer_id);
+    // TODO: init the event loop for the protocol
 }
 
 
@@ -25,7 +35,7 @@ fn ping_protocol() {
     let (mut tx, mut rx) = mpsc::channel::<Multiaddr>(1);
 
     let addr = "/ip4/127.0.0.1/tcp/0".parse().unwrap();
-    swarm1.listen_on(addr).unwrap();
+    swarm1.listen_on(addr).unwrap();w
 
     let expected_ping = ping.clone();
     let expected_pong = pong.clone();

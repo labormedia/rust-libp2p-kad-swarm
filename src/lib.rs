@@ -66,7 +66,7 @@ pub struct LookupClient {
     pub local_peer_id: PeerId,
     pub listen_addrs: Vec<Multiaddr>,
     pub network: Vec<Network>,
-    swarm: Swarm<LookupBehaviour>
+    pub swarm: Swarm<LookupBehaviour>
 }
 
 #[derive(NetworkBehaviour)]
@@ -75,7 +75,7 @@ pub struct LookupBehaviour {
     pub(crate) ping: ping::Behaviour,
     pub(crate) identify: identify::Behaviour,
     #[cfg(feature = "test-protocol")]
-    request_response: RequestResponse<TestCodec> , // RequestResponseCodec is not implemented for TestCodec <---------------------------------
+    pub request_response: RequestResponse<TestCodec> , // RequestResponseCodec is not implemented for TestCodec <---------------------------------
     relay: relay::client::Client,
     keep_alive: swarm::keep_alive::Behaviour,
 }
@@ -402,8 +402,24 @@ impl LookupClient {
     pub fn is_connected(self: &Self, peer_id: &PeerId) -> bool {
         Swarm::is_connected(&self.swarm, &peer_id)
     }
-    pub async fn events(self: &mut Self) {
-
+    #[cfg(feature="test-protocol")]
+    pub async fn send_request(self: &mut Self, peer_id:PeerId) {
+        // self.swarm.
+        self.swarm.behaviour_mut().request_response.send_request(&peer_id, SYN("SYN".to_string().into_bytes()));
+    }
+    #[cfg(feature="test-protocol")]
+    pub async fn send_response(self: &mut Self, channel: ResponseChannel<SYNACK>) {
+        self.swarm.behaviour_mut().request_response.send_response(channel, SYNACK("SYNACK".to_string().into_bytes())).unwrap();
+    }
+    #[cfg(feature="test-protocol")]
+    pub async fn init(self: &mut Self) {
+        let expected_ping = SYN("SYN".to_string().into_bytes());
+        loop {
+            match self.swarm.next().await.expect("Infinite Stream.") {
+                SwarmEvent::NewListenAddr { address, .. } => { println!("New Listen Address : {:?}",address); }
+                _ => {}
+            }
+        }
     }
 }
 
