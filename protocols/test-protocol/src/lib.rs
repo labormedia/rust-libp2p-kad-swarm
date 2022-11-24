@@ -1,12 +1,5 @@
 use async_trait::async_trait;
 use libp2p::request_response::*;
-use libp2p::core::{
-    identity,
-    muxing::StreamMuxerBox,
-    transport,
-    upgrade::{self, read_length_prefixed, write_length_prefixed},
-    Multiaddr, PeerId,
-};
 use std::io;
 use futures::{prelude::*, AsyncWriteExt};
 
