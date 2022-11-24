@@ -1,9 +1,12 @@
-use rust_libp2p_kad_swarm::*;
+use rust_libp2p_kad_swarm as synack_node;
 
 fn main() {
-    println!("Hello Requester")
+    
 }
 
+
+
+/* 
 fn ping_protocol() {
     let ping = Ping("ping".to_string().into_bytes());
     let pong = Pong("pong".to_string().into_bytes());
@@ -106,3 +109,5 @@ fn mk_transport() -> (PeerId, transport::Boxed<(PeerId, StreamMuxerBox)>) {
             .boxed(),
     )
 }
+
+*/

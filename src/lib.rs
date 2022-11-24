@@ -59,7 +59,6 @@ use std::str::FromStr;
 #[cfg(feature = "request-response")]
 use libp2p::request_response;
 #[cfg(feature = "test-protocol")]
-// use test_protocol::*;
 use std::iter;
 
 pub struct LookupClient {
@@ -230,7 +229,11 @@ impl LookupClient {
         let ping = ping::Behaviour::new(ping::Config::new());
 
         #[cfg(feature = "test-protocol")]
-        let synack_proto = RequestResponse::new(TestCodec(), iter::once((TestProtocol(), request_response::ProtocolSupport::Full)), request_response::RequestResponseConfig::default() );
+        let synack_protocol = RequestResponse::new(
+            TestCodec(), iter::once((TestProtocol(), 
+            request_response::ProtocolSupport::Full)), 
+            request_response::RequestResponseConfig::default() 
+        );
 
         let user_agent =
             "substrate-node/v2.0.0-e3245d49d-x86_64-linux-gnu (unknown)".to_string();
@@ -246,7 +249,7 @@ impl LookupClient {
             ping,
             identify,
             #[cfg(feature = "test-protocol")]
-            request_response: synack_proto,
+            request_response: synack_protocol,
             relay: relay_client,
             keep_alive: swarm::keep_alive::Behaviour,
         }
