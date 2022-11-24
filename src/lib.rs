@@ -411,6 +411,9 @@ impl LookupClient {
     pub async fn send_response(self: &mut Self, channel: ResponseChannel<SYNACK>) {
         self.swarm.behaviour_mut().request_response.send_response(channel, SYNACK("SYNACK".to_string().into_bytes())).unwrap();
     }
+    pub async fn kademlia_add_address(self: &mut Self, peer_id: PeerId, address: Multiaddr) {
+        self.swarm.behaviour_mut().kademlia.borrow_mut().add_address(&peer_id, address);
+    }
     #[cfg(feature="test-protocol")]
     pub async fn add_address(self: &mut Self, peer_id: PeerId, address: Multiaddr) {
         self.swarm
@@ -444,7 +447,7 @@ impl LookupClient {
                         .unwrap();
                     break peer;
                 },
-                _ => { println!("unknown event")}
+                _ => { }
             }
         }
     }
