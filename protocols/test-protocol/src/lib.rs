@@ -11,15 +11,15 @@ use std::io;
 use futures::{prelude::*, AsyncWriteExt};
 
 #[derive(Debug, Clone)]
-struct TestProtocol();
+pub struct TestProtocol();
 #[derive(Clone)]
-struct TestCodec();
+pub struct TestCodec();
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct SYN(Vec<u8>);
+pub struct SYN(Vec<u8>);
 #[derive(Debug, Clone, PartialEq, Eq)]
-struct SYNACK(Vec<u8>);
-#[derive(Debug, Clone, PartialEq, Eq)]
-struct ACK(Vec<u8>);
+pub struct SYNACK(Vec<u8>);
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// struct ACK(Vec<u8>);
 
 impl ProtocolName for TestProtocol {
     fn protocol_name(&self) -> &[u8] {

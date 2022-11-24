@@ -7,7 +7,10 @@ use futures::{
         StreamExt,
     },
 };
+use libp2p::multiaddr::Protocol;
 use libp2p::relay::v2::client::Client;
+use libp2p::request_response::{RequestResponseCodec, RequestResponse};
+use test_protocol::{TestProtocol, SYN};
 use std::time::Duration;
 use libp2p::identity::Keypair;
 use libp2p::kad::{
@@ -54,8 +57,10 @@ use crate::core::muxing::StreamMuxerBox;
 use thiserror::Error;
 use std::str::FromStr;
 #[cfg(feature = "request-response")]
-use libp2p::request_response::*;
-
+use libp2p::request_response;
+#[cfg(feature = "test-protocol")]
+use test_protocol::*;
+use std::iter;
 
 pub struct LookupClient {
     local_key: Keypair,
@@ -70,6 +75,8 @@ pub struct LookupBehaviour {
     pub(crate) kademlia: Kademlia<MemoryStore>,
     pub(crate) ping: ping::Behaviour,
     pub(crate) identify: identify::Behaviour,
+    #[cfg(feature = "test-protocol")]
+    request_response: RequestResponse<TestCodec> , // RequestResponseCodec is not implemented for TestCodec <---------------------------------
     relay: relay::client::Client,
     keep_alive: swarm::keep_alive::Behaviour,
 }
@@ -222,6 +229,9 @@ impl LookupClient {
 
         let ping = ping::Behaviour::new(ping::Config::new());
 
+        #[cfg(feature = "test-protocol")]
+        let synack_proto = RequestResponse::new(TestCodec(), iter::once((TestProtocol(), request_response::ProtocolSupport::Full)), request_response::RequestResponseConfig::default() );
+
         let user_agent =
             "substrate-node/v2.0.0-e3245d49d-x86_64-linux-gnu (unknown)".to_string();
         let proto_version = "/ipfs/id/1.0.0".to_string();
@@ -235,6 +245,8 @@ impl LookupClient {
             kademlia,
             ping,
             identify,
+            #[cfg(feature = "test-protocol")]
+            request_response: synack_proto,
             relay: relay_client,
             keep_alive: swarm::keep_alive::Behaviour,
         }

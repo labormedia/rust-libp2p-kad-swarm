@@ -18,6 +18,8 @@ timer = "0.2.0"
 chrono = "0.4.23"
 
 [features]
+default = [ "full" ]
+full = [ "request-response", "test-protocol" ]
 request-response = [ "libp2p/request-response" ]
 test-protocol = [ "request-response", "dep:test-protocol" ]
 
