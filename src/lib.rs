@@ -7,7 +7,7 @@ use futures::{
         StreamExt,
     },
 };
-use libp2p::multiaddr::Protocol;
+// use libp2p::multiaddr::Protocol;
 use libp2p::relay::v2::client::Client;
 use libp2p::request_response::{RequestResponseCodec, RequestResponse};
 // use test_protocol::{TestProtocol, SYN};
@@ -423,29 +423,50 @@ impl LookupClient {
             .add_address(&peer_id, address)    
     }
     #[cfg(feature="test-protocol")]
-    pub async fn init(self: &mut Self) -> PeerId {
+    pub async fn init_protocol(self: &mut Self) -> PeerId {
+        use std::borrow::Borrow;
+
         let syn = SYN("SYN".to_string().into_bytes());
         let synack = SYNACK("SYNACK".to_string().into_bytes());
         loop {
             match self.swarm.next().await.expect("Infinite Stream.") {
                 SwarmEvent::NewListenAddr { address, .. } => { println!("New Listen Address : {:?}",address); },
                 SwarmEvent::Behaviour( LookupBehaviourEvent::RequestResponse(
+                    RequestResponseEvent::ResponseSent { peer, .. }
+                ) ) => {
+                    println!("Response sent to {:?}", peer);
+                },
+                SwarmEvent::Behaviour(
+                    LookupBehaviourEvent::RequestResponse (
+                        RequestResponseEvent::Message { 
+                            peer, 
+                            message: 
+                                RequestResponseMessage::Response { 
+                                    request_id, 
+                                    response 
+                                } }
+                    )
+                ) => {
+                    println!("Response : {:?} {:?} {:?}", peer, request_id, response);
+                }
+                SwarmEvent::Behaviour( LookupBehaviourEvent::RequestResponse(
                     RequestResponseEvent::Message {
                         peer,
                         message:
                             RequestResponseMessage::Request {
-                                request, channel, ..
+                                request, 
+                                channel, ..
                             },
                     }
                     )
                 ) => {
                     assert_eq!(&request, &syn);
+                    println!("Channel : {:?}", channel);
                     self.swarm
                         .behaviour_mut()
                         .request_response
-                        .send_response(channel, synack)
+                        .send_response(channel, synack.clone())
                         .unwrap();
-                    break peer;
                 },
                 _ => { }
             }
@@ -581,10 +602,6 @@ mod tests {
                     SwarmEvent::NewListenAddr { address, .. } => {
                         println!("Listening on {:?}", address);
                         node_b.listen_addrs.push(address);
-                        // if node_a.listen_addrs.len() > addrs_count {
-                        //     break node_a;
-                        // }
-                        // break "TODO".to_string();
                     },
                     SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
                         identify::Event::Sent {
@@ -592,7 +609,6 @@ mod tests {
                         },
                     )) => {
                         println!("Sent identify info to {:?}", peer_id);
-                        // break peer_id;
                     }
                     SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
                         KademliaEvent::RoutingUpdated { 

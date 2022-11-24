@@ -1,9 +1,9 @@
 # rust-libp2p-kad-swarm
 Rust implementation of a minimal handshake session with Kademlia implementation under rust-libp2p.
 
-It implements libp2p's kademlia dht networking routing, identify, relay, ping, keep_alive and request_respond behaviour layers, which we will be available for node discovery and nat traversal tooling. It also includes two examples as demo, one responder/target and a requester/guest. For simplicity of the example execution, the target's peerid is kept constant and the requester/guest's peer id is ephemeral to each execution (random).
+It implements libp2p's kademlia dht networking routing, identify, relay, ping, keep_alive and request_respond behaviour layers, which we will be available for node discovery and nat traversal tooling. It includes two examples as demo, one responder/target and a requester/guest with ephemeral (random) peer ids for p2p connection per execution.
 
-Because of the possible complications, the examples does not consider nat traversal, so you should be able to reach the node's ip and port both inbound and outbound. On local network this should be trivial.
+Because of the possible complications, the examples does not consider NAT traversal[1], so you should be able to reach the node's network address both inbound and outbound. On local network this should be trivial.
 
 
 ## Build

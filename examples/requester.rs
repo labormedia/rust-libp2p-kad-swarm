@@ -1,5 +1,7 @@
+// Example usage for listening a sending a Request
+
 use rust_libp2p_kad_swarm as synack_node;
-use libp2p::{
+use libp2p::core::{
     PeerId,
     Multiaddr
 };
@@ -7,15 +9,22 @@ use std::str::FromStr;
 
 #[async_std::main]
 async fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    println!("Arguments: {:?}", args);
     let mut a = synack_node::LookupClient::new(
         &synack_node::Network::Kusama
     );
-    let expected_peer_id: PeerId = PeerId::from_str("12D3KooWEYuMN7eZHV8bCvZaNE7zXt4E8kjYbvXNxk3m97hhvuyD").unwrap();  // predicted :"12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu"
-    let expected_address : Multiaddr = Multiaddr::from_str("/ip4/181.43.255.231/tcp/34421").unwrap();
+    let expected_peer_id: PeerId = match PeerId::from_str(&args[1]) {
+        Ok(peer) => peer,
+        Err(e) => panic!("{e:}")
+    };  // special case :"12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu"
+    let expected_address = match Multiaddr::from_str(&args[2]) {
+        Ok(address) => address,
+        Err(e) => panic!("{e:}")
+    };
     let _ = a.add_address(expected_peer_id, expected_address).await;
 
     let _ = a.listen().await;
     let _ = a.send_request(expected_peer_id).await;
-    a.init().await;
-    // TODO: init the event loop for the protocol
+    a.init_protocol().await;
 }
