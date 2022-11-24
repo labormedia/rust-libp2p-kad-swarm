@@ -238,7 +238,6 @@ impl LookupClient {
         let user_agent =
             "substrate-node/v2.0.0-e3245d49d-x86_64-linux-gnu (unknown)".to_string();
         let proto_version = "/ipfs/id/1.0.0".to_string();
-        // let proto_version = "/ipfs/id/1.0.0".to_string();
         let identify = identify::Behaviour::new(
             identify::Config::new(proto_version, local_key.public())
                 .with_agent_version(user_agent),
@@ -424,8 +423,6 @@ impl LookupClient {
     }
     #[cfg(feature="test-protocol")]
     pub async fn init_protocol(self: &mut Self) -> PeerId {
-        use std::borrow::Borrow;
-
         let syn = SYN("SYN".to_string().into_bytes());
         let synack = SYNACK("SYNACK".to_string().into_bytes());
         loop {

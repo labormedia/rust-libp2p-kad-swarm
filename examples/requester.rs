@@ -16,15 +16,27 @@ async fn main() {
     );
     let expected_peer_id: PeerId = match PeerId::from_str(&args[1]) {
         Ok(peer) => peer,
-        Err(e) => panic!("{e:}")
+        Err(e) => {
+            usage_message();
+            panic!("{e:}")
+        }
     };  // special case :"12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu"
     let expected_address = match Multiaddr::from_str(&args[2]) {
         Ok(address) => address,
-        Err(e) => panic!("{e:}")
+        Err(e) => {
+            usage_message();
+            panic!("{e:}")
+        }
     };
     let _ = a.add_address(expected_peer_id, expected_address).await;
 
     let _ = a.listen().await;
     let _ = a.send_request(expected_peer_id).await;
     a.init_protocol().await;
+}
+
+fn usage_message() {
+    println!("
+    Usage: ./target/debug/examples/requester [peerid] [multiaddress]
+    ")
 }
