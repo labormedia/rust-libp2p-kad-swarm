@@ -45,6 +45,8 @@ Run the requester "B" along with the arguments for [peer id] and [address] provi
 
 ```$ ./target/release/examples/requester [peerid] [address]```
 
+A "Response Sent" event from "A" and a "Response Received" event on "B" should show on each terminal with the corresponding ephemeral addresses of their counterpart, after which the handshake finishes.
+
 Usage example:
 
 ```
