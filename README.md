@@ -18,17 +18,17 @@ Because of the possible complications, the examples does not consider NAT traver
 `cargo test -- --nocapture`
 
 ## Protocol Test
-Build the library, main binary and examples on both nodes A and B:
+Build the library, main binary and examples for both nodes A (responder) and B (requester):
 
 ```cargo build --examples --release```
 
-Run the Responder on A:
+Run the Responder A:
 
 ```$./target/release/examples/responder```
 
 Wait for the [peer id] and [address] confirmation. If you are not sure about the NAT traversal of this address, the fastest try would be to look for a local address alternative which would be visible between both peers. From within the same host, 127.0.0.1 should work on most cases.
 
-Run the requester with the [peer id] and [address] provided by A, on the other node B:
+Run the requester "B" along with the arguments for [peer id] and [address] provided by "A":
 
 ```$./target/release/examples/requester [peerid] [address]```
 
@@ -49,7 +49,7 @@ Closing connection.
 $ 
 ```
 
-```$ ./target/release/examples/requester 12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW /ip4/127.0.0.1/tcp/43263
+```$ ./target/release/examples/requester "12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW" /ip4/127.0.0.1/tcp/43263
 Arguments: ["./target/release/examples/requester", "12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW", "/ip4/192.168.100.55/tcp/43263"]
 Local PeerID : PeerId("12D3KooWP9G85K4b6wPeuYqGg6RnQn8217d3KMJBNitmTfWFS2HE")
 New Listen Address : "/ip4/127.0.0.1/tcp/43231"
