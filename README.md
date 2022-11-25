@@ -20,19 +20,21 @@ Because of the possible complications, the examples does not consider NAT traver
 ## Protocol Test
 Build the library, main binary and examples on both nodes A and B:
 
-`cargo build --examples --release`
+```cargo build --examples --release```
+
 Run the Responder on A:
 
-`$./target/release/examples/responder`
+```$./target/release/examples/responder```
 
 Wait for the [peer id] and [address] confirmation. If you are not sure about the NAT traversal of this address, the fastest try would be to look for a local address alternative which would be visible between both peers. From within the same host, 127.0.0.1 should work on most cases.
 
 Run the requester with the [peer id] and [address] provided by A, on the other node B:
 
-`$./target/release/examples/requester [peerid] [address]`
+```$./target/release/examples/requester [peerid] [address]```
 
-usage example:
-`$./target/release/examples/responder
+Usage example:
+
+```$./target/release/examples/responder
 Local PeerID : PeerId("12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW")
 PeerId("12D3KooWDgtynm4S9M3m6ZZhXYu2RrWKdvkCSScc25xKDVSg1Sjd") added in the Routing Table.
 PeerId("12D3KooWNpGriWPmf621Lza9UWU9eLLBdCFaErf6d4HSK7Bcqnv4") added in the Routing Table.
@@ -45,9 +47,9 @@ Request received from : PeerId("12D3KooWP9G85K4b6wPeuYqGg6RnQn8217d3KMJBNitmTfWF
 Response sent to : PeerId("12D3KooWP9G85K4b6wPeuYqGg6RnQn8217d3KMJBNitmTfWFS2HE")
 Closing connection.
 $ 
-`
+```
 
-`$ ./target/release/examples/requester 12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW /ip4/127.0.0.1/tcp/43263
+```$ ./target/release/examples/requester 12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW /ip4/127.0.0.1/tcp/43263
 Arguments: ["./target/release/examples/requester", "12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW", "/ip4/192.168.100.55/tcp/43263"]
 Local PeerID : PeerId("12D3KooWP9G85K4b6wPeuYqGg6RnQn8217d3KMJBNitmTfWFS2HE")
 New Listen Address : "/ip4/127.0.0.1/tcp/43231"
@@ -55,7 +57,7 @@ New Listen Address : "/ip4/192.168.100.55/tcp/43231"
 New Listen Address : "/ip4/172.17.0.1/tcp/43231"
 Response received : PeerId("12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW") RequestId(1) "SYNACK"
 Closing handshake.
-$`
+$```
 
 Thank you and enjoy!
 ;) <3
