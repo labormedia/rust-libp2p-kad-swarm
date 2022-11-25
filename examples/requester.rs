@@ -6,6 +6,7 @@ use libp2p::core::{
     Multiaddr
 };
 use std::str::FromStr;
+use test_protocol;
 
 #[async_std::main]
 async fn main() {
@@ -14,6 +15,10 @@ async fn main() {
     let mut a = synack_node::LookupClient::new(
         &synack_node::Network::Kusama
     );
+    if &args.len() < &3 {
+        usage_message(); 
+        panic!("Expected parameters")
+    }
     let expected_peer_id: PeerId = match PeerId::from_str(&args[1]) {
         Ok(peer) => peer,
         Err(e) => {
@@ -31,12 +36,13 @@ async fn main() {
     let _ = a.add_address(expected_peer_id, expected_address).await;
 
     let _ = a.listen().await;
-    let _ = a.send_request(expected_peer_id).await;
+    let payload = test_protocol::SYN("SYN".to_string().into_bytes());
+    let _ = a.send_request(expected_peer_id, payload).await;
     a.init_protocol().await;
 }
 
 fn usage_message() {
     println!("
-    Usage: ./target/debug/examples/requester [peerid] [multiaddress]
+    Usage: ./target/debug/examples/requester [peer_id] [multiaddress]
     ")
 }

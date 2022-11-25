@@ -23,6 +23,6 @@ async fn main() {
     };
     println!("Found {:?} {:?} {:?}", peer.peer_id, peer.listen_addrs, peer.protocols);
     println!("Observed peer_id and addresses : {:?} {:?}", a.local_peer_id, peer.observed_addr);
-    let request_peer_address = a.init_protocol().await;
-    println!("SYN from node[{:?}]", request_peer_address);
+    let _request_peer_address = a.init_protocol().await;
+    println!("Closing connection.");
 }

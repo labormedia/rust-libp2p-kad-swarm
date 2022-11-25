@@ -60,6 +60,7 @@ use std::str::FromStr;
 use libp2p::request_response;
 #[cfg(feature = "test-protocol")]
 use std::iter;
+use test_protocol;
 
 pub struct LookupClient {
     local_key: Keypair,
@@ -257,7 +258,7 @@ impl LookupClient {
         self.swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
     }
     async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
-        type DynFuture = Box<dyn futures::future::Future<Output = Result<Peer, NetworkError>>>;
+        // type DynFuture = Box<dyn futures::future::Future<Output = Result<Peer, NetworkError>>>;
         self.swarm.behaviour_mut().kademlia.get_closest_peers(peer);
         loop {
             match self.swarm.next().await.expect("Infinite Stream.") {
@@ -402,13 +403,12 @@ impl LookupClient {
         Swarm::is_connected(&self.swarm, &peer_id)
     }
     #[cfg(feature="test-protocol")]
-    pub async fn send_request(self: &mut Self, peer_id:PeerId) {
-        // self.swarm.
-        self.swarm.behaviour_mut().request_response.send_request(&peer_id, SYN("SYN".to_string().into_bytes()));
+    pub async fn send_request(self: &mut Self, peer_id:PeerId, payload: test_protocol::SYN) {
+        self.swarm.behaviour_mut().request_response.send_request(&peer_id, payload);
     }
     #[cfg(feature="test-protocol")]
-    pub async fn send_response(self: &mut Self, channel: ResponseChannel<SYNACK>) {
-        self.swarm.behaviour_mut().request_response.send_response(channel, SYNACK("SYNACK".to_string().into_bytes())).unwrap();
+    pub async fn send_response(self: &mut Self, channel: ResponseChannel<test_protocol::SYNACK>, payload: test_protocol::SYNACK) {
+        self.swarm.behaviour_mut().request_response.send_response(channel, payload).unwrap();
     }
     pub async fn kademlia_add_address(self: &mut Self, peer_id: PeerId, address: Multiaddr) {
         self.swarm.behaviour_mut().kademlia.borrow_mut().add_address(&peer_id, address);
@@ -423,15 +423,17 @@ impl LookupClient {
     }
     #[cfg(feature="test-protocol")]
     pub async fn init_protocol(self: &mut Self) -> PeerId {
-        let syn = SYN("SYN".to_string().into_bytes());
-        let synack = SYNACK("SYNACK".to_string().into_bytes());
+
+        let synack = test_protocol::SYNACK("SYNACK".to_string().into_bytes());
+        let ack = test_protocol::SYN("ACK".to_string().into_bytes());
         loop {
             match self.swarm.next().await.expect("Infinite Stream.") {
                 SwarmEvent::NewListenAddr { address, .. } => { println!("New Listen Address : {:?}",address); },
                 SwarmEvent::Behaviour( LookupBehaviourEvent::RequestResponse(
                     RequestResponseEvent::ResponseSent { peer, .. }
                 ) ) => {
-                    println!("Response sent to {:?}", peer);
+                    println!("Response sent to : {:?}", peer);
+                    break peer
                 },
                 SwarmEvent::Behaviour(
                     LookupBehaviourEvent::RequestResponse (
@@ -444,8 +446,29 @@ impl LookupClient {
                                 } }
                     )
                 ) => {
-                    println!("Response : {:?} {:?} {:?}", peer, request_id, response);
+                    match response {
+                        test_protocol::SYNACK(payload) => { 
+                            println!("Response received : {:?} {:?} {:?}", peer, request_id, std::str::from_utf8(&payload).unwrap());
+                            self.send_request( peer, ack.clone()).await;
+                            match std::str::from_utf8(&payload).unwrap() {
+                                "ACK" => { 
+                                     // TODO : timer
+                                    break peer
+                                }
+                                "SYNACK" => {
+                                    // self.send_request( peer, ack.clone()).await;
+                                    println!("Handshake succeded.");
+                                    break peer
+                                }
+
+                                _ => {}
+                            }
+                        }
+                        _ => { println!("Unknown payload.") }
+                    }
                 }
+            // }
+                    
                 SwarmEvent::Behaviour( LookupBehaviourEvent::RequestResponse(
                     RequestResponseEvent::Message {
                         peer,
@@ -457,13 +480,23 @@ impl LookupClient {
                     }
                     )
                 ) => {
-                    assert_eq!(&request, &syn);
-                    println!("Channel : {:?}", channel);
-                    self.swarm
-                        .behaviour_mut()
-                        .request_response
-                        .send_response(channel, synack.clone())
-                        .unwrap();
+                    match request {
+                        test_protocol::SYN(payload) => { 
+                            println!("Request received from : {:?} {:?}", peer, std::str::from_utf8(&payload).unwrap());
+                            match std::str::from_utf8(&payload).unwrap() {
+                                "SYN" => {
+                                    self.send_response(channel, synack.clone()).await;
+                                },
+                                "ACK" => {
+                                    println!("Handshake succeded.");
+                                    break peer;
+                                },
+                                _ => {}
+                            }
+                        }
+                        _ => { }
+                    };
+
                 },
                 _ => { }
             }
@@ -491,7 +524,8 @@ mod tests {
 
     #[async_std::test]
     async fn local_dial() -> Result<(), swarm::DialError>{
-        let addrs_count = 0; // change this if you want to test another address or you have fewer count of addresses
+        // the next address will be considered. 
+        let addrs_count = 0; 
         let mut node_a = LookupClient::new(&Network::Kusama);
         let mut node_b = LookupClient::new(&Network::Kusama);
         let node_b = async_std::task::spawn(async move {
@@ -514,19 +548,11 @@ mod tests {
 
     #[async_std::test]
     async fn async_identify() -> Result<(), DialError> {
-        println!("again");
-        let addrs_count = 0; // change this if you want to test another address or you have fewer count of addresses
+        // the next address will be considered. 
+        let addrs_count = 0; 
         let net = Network::Kusama;
         let mut node_a = LookupClient::new(&net);
         let mut node_b = LookupClient::new(&net);
-        // let transport = libp2p::development_transport(node_a.local_key).await?;
-
-        // // Create a identify network behaviour.
-        // let behaviour = identify::Behaviour::new(identify::Config::new(
-        //     "/ipfs/id/1.0.0".to_string(),
-        //     node_a.local_key.public(),
-        // ));
-  
         let mut node_a = async_std::task::spawn(async move {
             let _ = node_a.listen().await;
             let mut addr = loop {
@@ -595,7 +621,7 @@ mod tests {
                                     ..
                                 },
                         },
-                    )) => { println!("Hello Event")}
+                    )) => { println!("Identified Received") }
                     SwarmEvent::NewListenAddr { address, .. } => {
                         println!("Listening on {:?}", address);
                         node_b.listen_addrs.push(address);
@@ -647,10 +673,12 @@ use libp2p::core::upgrade::{
 pub struct TestProtocol();
 #[derive(Clone)]
 pub struct TestCodec();
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SYN(Vec<u8>);
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct SYNACK(Vec<u8>);
+// The message types will be derived from the protocol types specification located at 'protocols/test-protocol/src/lib.rs'
+// This is intented for workspace management of protocols.
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub struct SYN(Vec<u8>);
+// #[derive(Debug, Clone, PartialEq, Eq)]
+// pub struct SYNACK(Vec<u8>);
 // #[derive(Debug, Clone, PartialEq, Eq)]
 // struct ACK(Vec<u8>);
 
@@ -663,8 +691,8 @@ impl ProtocolName for TestProtocol {
 #[async_trait]
 impl RequestResponseCodec for TestCodec {
     type Protocol = TestProtocol;
-    type Request = SYN;
-    type Response = SYNACK;
+    type Request = test_protocol::SYN;
+    type Response = test_protocol::SYNACK;
 
     async fn read_request<T>(&mut self, _: &TestProtocol, io: &mut T) -> io::Result<Self::Request>
     where
@@ -676,7 +704,7 @@ impl RequestResponseCodec for TestCodec {
             return Err(io::ErrorKind::UnexpectedEof.into());
         }
 
-        Ok(SYN(vec))
+        Ok(test_protocol::SYN(vec))
     }
 
     async fn read_response<T>(&mut self, _: &TestProtocol, io: &mut T) -> io::Result<Self::Response>
@@ -689,14 +717,14 @@ impl RequestResponseCodec for TestCodec {
             return Err(io::ErrorKind::UnexpectedEof.into());
         }
 
-        Ok(SYNACK(vec))
+        Ok(test_protocol::SYNACK(vec))
     }
 
     async fn write_request<T>(
         &mut self,
         _: &TestProtocol,
         io: &mut T,
-        SYN(data): SYN,
+        test_protocol::SYN(data): test_protocol::SYN,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
@@ -711,7 +739,7 @@ impl RequestResponseCodec for TestCodec {
         &mut self,
         _: &TestProtocol,
         io: &mut T,
-        SYNACK(data): SYNACK,
+        test_protocol::SYNACK(data): test_protocol::SYNACK,
     ) -> io::Result<()>
     where
         T: AsyncWrite + Unpin + Send,
