@@ -5,10 +5,22 @@ While a responder "A" listens, the requester "B" sends a SYN<->SYN message to "A
 
 It implements libp2p's kademlia dht networking routing, identify, noise, yamux, relay, ping, keep_alive and request_respond behaviour layers, which are available for node discovery and nat traversal tooling. It also includes two examples as demo, a responder/target and a requester/guest with ephemeral (random) peer ids for p2p connection per execution.
 
-Because of the possible complications, the examples does not consider NAT traversal[1]. It should be able to reach the node's network address both inbound and outbound for it to succeed. On local network this should be trivial.
+Because of the possible complications, the examples does not consider NAT traversal[1]. It should be able to reach the node's network address both inbound and outbound for it to succeed.
 
+## Requirements:
+
+- Cargo
+- Protobuffer compiler
+
+On Ubuntu it is available through package manager.
+
+```
+$ apt update && apt upgrade -y
+$ apt install -y protobuf-compiler libprotobuf-dev
+```
 
 ## Build
+
 `$ cargo build`
 
 ## Run
@@ -17,7 +29,8 @@ Because of the possible complications, the examples does not consider NAT traver
 ## Tests
 `$ cargo test -- --nocapture`
 
-## Protocol Test
+## Protocol Integration Test
+
 Build the library, main binary and examples for both nodes A (responder) and B (requester):
 
 ```$ cargo build --examples --release```
