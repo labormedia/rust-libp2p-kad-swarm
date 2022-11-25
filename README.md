@@ -1,5 +1,5 @@
 # rust-libp2p-kad-swarm
-Rust implementation of a minimal handshake session with Kademlia implementation under rust-libp2p.
+Rust implementation of a minimal handshake session with Kademlia over rust-libp2p.
 
 While a responder "A" listens, the requester "B" sends a SYN<->SYN message to "A" using its [peer_id] and [address], "A" responds with SYN<->SYNACK and disconnects while "B" expects the SYN<->SYNACK and disconnects which makes this simple handshake conclude under a private, ephemeral and permissionless network connection provided by the rust-libp2p library.
 
