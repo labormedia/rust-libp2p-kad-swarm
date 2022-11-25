@@ -9,32 +9,32 @@ Because of the possible complications, the examples does not consider NAT traver
 
 
 ## Build
-`cargo build`
+`$ cargo build`
 
 ## Run
-`cargo run`
+`$ cargo run`
 
 ## Tests
-`cargo test -- --nocapture`
+`$ cargo test -- --nocapture`
 
 ## Protocol Test
 Build the library, main binary and examples for both nodes A (responder) and B (requester):
 
-```cargo build --examples --release```
+```$ cargo build --examples --release```
 
 Run the Responder A:
 
-```$./target/release/examples/responder```
+```$ ./target/release/examples/responder```
 
 Wait for the [peer id] and [address] confirmation. If you are not sure about the NAT traversal of this address, the fastest try would be to look for a local address alternative which would be visible between both peers. From within the same host, 127.0.0.1 should work on most cases.
 
 Run the requester "B" along with the arguments for [peer id] and [address] provided by "A":
 
-```$./target/release/examples/requester [peerid] [address]```
+```$ ./target/release/examples/requester [peerid] [address]```
 
 Usage example:
 
-```$./target/release/examples/responder
+```$ ./target/release/examples/responder
 Local PeerID : PeerId("12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW")
 PeerId("12D3KooWDgtynm4S9M3m6ZZhXYu2RrWKdvkCSScc25xKDVSg1Sjd") added in the Routing Table.
 PeerId("12D3KooWNpGriWPmf621Lza9UWU9eLLBdCFaErf6d4HSK7Bcqnv4") added in the Routing Table.
@@ -46,8 +46,7 @@ Observed peer_id and addresses : PeerId("12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c4
 Request received from : PeerId("12D3KooWP9G85K4b6wPeuYqGg6RnQn8217d3KMJBNitmTfWFS2HE") [83, 89, 78]
 Response sent to : PeerId("12D3KooWP9G85K4b6wPeuYqGg6RnQn8217d3KMJBNitmTfWFS2HE")
 Closing connection.
-$ 
-```
+$ ```
 
 ```$ ./target/release/examples/requester "12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW" /ip4/127.0.0.1/tcp/43263
 Arguments: ["./target/release/examples/requester", "12D3KooWFFYGHLUYL68rGRyQhYcJTWbLokAJ3c48LGFt5PmG3qeW", "/ip4/192.168.100.55/tcp/43263"]
