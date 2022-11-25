@@ -1,16 +1,13 @@
 use std::borrow::{BorrowMut};
-use std::{io, clone};
-// use futures::{TryFutureExt, FutureExt};
+use std::{io};
 use futures::{
     executor::block_on,
     stream::{
         StreamExt,
     },
 };
-// use libp2p::multiaddr::Protocol;
 use libp2p::relay::v2::client::Client;
 use libp2p::request_response::{RequestResponseCodec, RequestResponse};
-// use test_protocol::{TestProtocol, SYN};
 use std::time::Duration;
 use libp2p::identity::Keypair;
 use libp2p::kad::{
@@ -44,8 +41,8 @@ use libp2p::{
     InboundUpgradeExt,
     OutboundUpgradeExt
 };
-use libp2p::core;
 use libp2p::core::{
+    self,
     transport::{
         OrTransport,
         Transport,
@@ -60,10 +57,9 @@ use std::str::FromStr;
 use libp2p::request_response;
 #[cfg(feature = "test-protocol")]
 use std::iter;
-use test_protocol;
 
 pub struct LookupClient {
-    local_key: Keypair,
+    // local_key: Keypair,
     pub local_peer_id: PeerId,
     pub listen_addrs: Vec<Multiaddr>,
     pub network: Vec<Network>,
@@ -76,7 +72,7 @@ pub struct LookupBehaviour {
     pub(crate) ping: ping::Behaviour,
     pub(crate) identify: identify::Behaviour,
     #[cfg(feature = "test-protocol")]
-    pub request_response: RequestResponse<TestCodec> , // RequestResponseCodec is not implemented for TestCodec <---------------------------------
+    pub request_response: RequestResponse<TestCodec>,
     relay: relay::client::Client,
     keep_alive: swarm::keep_alive::Behaviour,
 }
@@ -136,12 +132,12 @@ impl LookupClient {
         println!("Local PeerID : {:?}", local_peer_id);
         let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(local_peer_id);
         let transport = Self::build_transport(&local_key, relay_transport);
-        let behaviour = Self::build_behaviour(&local_key, &local_peer_id, Some(&net), relay_client);
+        let behaviour = Self::build_behaviour(&local_key, &local_peer_id, Some(net), relay_client);
         let swarm = Self::build_swarm(local_peer_id, Some(net.clone()), transport, behaviour);
         let network = Vec::from([net.clone()]);
         let listen_addrs: Vec<Multiaddr> = [].to_vec();
         LookupClient {
-            local_key,
+            // local_key,
             local_peer_id,
             listen_addrs,
             network,
@@ -254,7 +250,7 @@ impl LookupClient {
             keep_alive: swarm::keep_alive::Behaviour,
         }
     }
-    pub async fn listen(self: &mut Self) -> Result<core::transport::ListenerId, libp2p::TransportError<io::Error>> {
+    pub async fn listen(&mut self) -> Result<core::transport::ListenerId, libp2p::TransportError<io::Error>> {
         self.swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
     }
     async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
@@ -312,17 +308,17 @@ impl LookupClient {
                     } else {
                         println!("Adding {:?} to kademlia addresses list.", &addr.peer_id);
                         println!("Listened addresses : {:?}", &addr.listen_addrs);
-                        let listen_addrs = addr.listen_addrs[0].clone();
+                        let listen_addrs = addr.listen_addrs[0].clone(); // We are asumming the first address is available and accesible.
                         self.swarm.behaviour_mut().kademlia.borrow_mut().add_address(&addr.peer_id,listen_addrs );
                     }
                 },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
                     KademliaEvent::RoutingUpdated { 
                         peer, 
-                        is_new_peer, 
-                        addresses, 
-                        bucket_range, 
-                        old_peer 
+                        is_new_peer: _, 
+                        addresses: _, 
+                        bucket_range: _, 
+                        old_peer: _ 
                     })) => {
                         println!("{:?} added in the Routing Table.", peer);
                 },
@@ -372,49 +368,27 @@ impl LookupClient {
             }
         }
     }
-    pub async fn dial(self: &mut Self, peer_to_dial: &Peer) -> () {
+    pub async fn dial(&mut self, peer_to_dial: &Peer) {
         let address_to_dial = peer_to_dial.listen_addrs[0].clone();
         println!("Dialing...{:?}", address_to_dial);
         self.swarm.dial(address_to_dial).unwrap()
-    
-        // Thinking if this method should have an event loop or not.
-        // loop {
-        //     match self.swarm.select_next_some().await {
-        //         SwarmEvent::NewListenAddr { address, .. } => println!("Listening on {:?}", address),
-        //         // Prints peer id identify info is being sent to.
-        //         SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(identify::Event::Sent { peer_id, .. }) ) => {
-        //             println!("Sent identify info to {:?}", peer_id)
-        //             // print!(".");
-        //         }
-        //         // Prints out the info received via the identify event
-        //         SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(identify::Event::Received { peer_id, info, .. })) => {
-        //             if peer_id == peer_to_dial.peer_id {
-        //                 println!("Received {:?} {:?}", peer_id, info);
-        //                 break Ok(peer_id);
-        //             } else {
-        //                 print!(".");
-        //             }
-        //         }
-        //         _ => {}
-        //     }
-        // }
     }
-    pub fn is_connected(self: &Self, peer_id: &PeerId) -> bool {
-        Swarm::is_connected(&self.swarm, &peer_id)
+    pub fn is_connected(&self, peer_id: &PeerId) -> bool {
+        Swarm::is_connected(&self.swarm, peer_id)
     }
     #[cfg(feature="test-protocol")]
-    pub async fn send_request(self: &mut Self, peer_id:PeerId, payload: test_protocol::SYN) {
+    pub async fn send_request(&mut self, peer_id:PeerId, payload: test_protocol::SYN) {
         self.swarm.behaviour_mut().request_response.send_request(&peer_id, payload);
     }
     #[cfg(feature="test-protocol")]
-    pub async fn send_response(self: &mut Self, channel: ResponseChannel<test_protocol::SYNACK>, payload: test_protocol::SYNACK) {
+    pub async fn send_response(&mut self, channel: ResponseChannel<test_protocol::SYNACK>, payload: test_protocol::SYNACK) {
         self.swarm.behaviour_mut().request_response.send_response(channel, payload).unwrap();
     }
-    pub async fn kademlia_add_address(self: &mut Self, peer_id: PeerId, address: Multiaddr) {
+    pub async fn kademlia_add_address(&mut self, peer_id: PeerId, address: Multiaddr) {
         self.swarm.behaviour_mut().kademlia.borrow_mut().add_address(&peer_id, address);
     }
     #[cfg(feature="test-protocol")]
-    pub async fn add_address(self: &mut Self, peer_id: PeerId, address: Multiaddr) {
+    pub async fn add_address(&mut self, peer_id: PeerId, address: Multiaddr) {
         self.swarm
             .behaviour_mut()
             .request_response
@@ -422,7 +396,7 @@ impl LookupClient {
             .add_address(&peer_id, address)    
     }
     #[cfg(feature="test-protocol")]
-    pub async fn init_protocol(self: &mut Self) -> PeerId {
+    pub async fn init_protocol(&mut self) -> Result<PeerId,NetworkError> {
 
         let synack = test_protocol::SYNACK("SYNACK".to_string().into_bytes());
         let ack = test_protocol::SYN("ACK".to_string().into_bytes());
@@ -433,7 +407,7 @@ impl LookupClient {
                     RequestResponseEvent::ResponseSent { peer, .. }
                 ) ) => {
                     println!("Response sent to : {:?}", peer);
-                    break peer
+                    break Ok(peer)
                 },
                 SwarmEvent::Behaviour(
                     LookupBehaviourEvent::RequestResponse (
@@ -453,22 +427,18 @@ impl LookupClient {
                             match std::str::from_utf8(&payload).unwrap() {
                                 "ACK" => { 
                                      // TODO : timer
-                                    break peer
+                                    break Ok(peer)
                                 }
                                 "SYNACK" => {
                                     // self.send_request( peer, ack.clone()).await;
-                                    println!("Handshake succeded.");
-                                    break peer
+                                    println!("Handshake succeeded.");
+                                    break Ok(peer)
                                 }
-
                                 _ => {}
                             }
                         }
-                        _ => { println!("Unknown payload.") }
                     }
-                }
-            // }
-                    
+                },
                 SwarmEvent::Behaviour( LookupBehaviourEvent::RequestResponse(
                     RequestResponseEvent::Message {
                         peer,
@@ -488,15 +458,13 @@ impl LookupClient {
                                     self.send_response(channel, synack.clone()).await;
                                 },
                                 "ACK" => {
-                                    println!("Handshake succeded.");
-                                    break peer;
+                                    println!("Handshake succeeded.");
+                                    break Ok(peer);
                                 },
                                 _ => {}
                             }
                         }
-                        _ => { }
-                    };
-
+                    }
                 },
                 _ => { }
             }
@@ -514,8 +482,6 @@ mod tests {
     #[test]
     fn peerid_from_base64_string() {
         let lookup = LookupClient::from_base64(
-            // let base_64_encoded = "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=";
-            // let expected_peer_id = PeerId::from_str("12D3KooWEChVMMMzV8acJ53mJHrw1pQ27UAGkCxWXLJutbeUMvVu").unwrap();
             "CAESQL6vdKQuznQosTrW7FWI9At+XX7EBf0BnZLhb6w+N+XSQSdfInl6c7U4NuxXJlhKcRBlBw9d0tj2dfBIVf6mcPA=", 
             &Network::Kusama
         );
@@ -553,9 +519,9 @@ mod tests {
         let net = Network::Kusama;
         let mut node_a = LookupClient::new(&net);
         let mut node_b = LookupClient::new(&net);
-        let mut node_a = async_std::task::spawn(async move {
+        let node_a = async_std::task::spawn(async move {
             let _ = node_a.listen().await;
-            let mut addr = loop {
+            let addr = loop {
                 match node_a.swarm.select_next_some().await {
                     SwarmEvent::NewListenAddr { address, .. } => {
                         println!("Listening on {:?}", address);
@@ -586,9 +552,6 @@ mod tests {
                             protocols,
                             observed_addr,
                         };
-                        // if peer_id == node_b.local_peer_id {
-                        //     println!("Found.");
-                        // } else 
                         {
                             println!("Adding {:?} to kademlia addresses list.", &addr.peer_id);
                             println!("Listened addresses : {:?}", &addr.listen_addrs);
@@ -610,14 +573,14 @@ mod tests {
                 match node_b.swarm.select_next_some().await {
                     SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
                         identify::Event::Received {
-                            peer_id,
+                            peer_id: _,
                             info:
                                 identify::Info {
-                                    protocol_version,
-                                    agent_version,
-                                    listen_addrs,
-                                    protocols,
-                                    observed_addr,
+                                    protocol_version: _,
+                                    agent_version: _,
+                                    listen_addrs: _,
+                                    protocols: _,
+                                    observed_addr: _,
                                     ..
                                 },
                         },
@@ -636,10 +599,10 @@ mod tests {
                     SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
                         KademliaEvent::RoutingUpdated { 
                             peer, 
-                            is_new_peer, 
-                            addresses, 
-                            bucket_range, 
-                            old_peer 
+                            is_new_peer: _, 
+                            addresses: _, 
+                            bucket_range: _, 
+                            old_peer: _ 
                         })) => {
                             println!("{:?} added in the Routing Table.", peer);
                             if peer == node_a.local_peer_id {
@@ -658,7 +621,7 @@ mod tests {
 
 
 
-
+// Protocol dependencies .
 
 use async_trait::async_trait;
 use libp2p::request_response::*;

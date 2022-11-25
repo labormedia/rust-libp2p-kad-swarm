@@ -38,7 +38,12 @@ async fn main() {
     let _ = a.listen().await;
     let payload = test_protocol::SYN("SYN".to_string().into_bytes());
     let _ = a.send_request(expected_peer_id, payload).await;
-    a.init_protocol().await;
+    match a.init_protocol().await {
+        Ok(peer) => {
+            println!("Handshake with {:?} succeded.", peer);
+        }
+        Err(e) => panic!("There was an error : {:?}",e)
+    }
 }
 
 fn usage_message() {
