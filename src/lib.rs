@@ -29,7 +29,6 @@ use libp2p::{
         SwarmEvent,
         NetworkBehaviour
     },
-    NetworkBehaviour,
     Swarm,
     PeerId,
     Multiaddr,
@@ -41,6 +40,7 @@ use libp2p::{
     InboundUpgradeExt,
     OutboundUpgradeExt
 };
+// use libp2p_quic as quic;
 use libp2p::core::{
     self,
     transport::{
@@ -173,6 +173,12 @@ impl LookupClient {
         swarm
     }
     fn build_transport(local_key: &Keypair, relay_transport: ClientTransport) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
+
+        // let mut config = quic::Config::new(&keypair);
+        // config.handshake_timeout = Duration::from_secs(1);
+    
+        // let quic_transport = quic::async_std::Transport::new(config);
+
         // Reference: https://github.com/mxinden/libp2p-lookup/blob/41f4e2fc498b44bcdd2d4b381363dea0b740336b/src/main.rs#L136-L175
         let transport = OrTransport::new(
             relay_transport,
@@ -323,7 +329,7 @@ impl LookupClient {
                         println!("{:?} added in the Routing Table.", peer);
                 },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted {
+                    KademliaEvent::OutboundQueryProgressed {
                         result: QueryResult::Bootstrap(_),
                         ..
                     },
@@ -331,7 +337,7 @@ impl LookupClient {
                     panic!("Unexpected bootstrap.");
                 },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
-                    KademliaEvent::OutboundQueryCompleted {
+                    KademliaEvent::OutboundQueryProgressed {
                         result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { peers, .. })),
                         ..
                     },
