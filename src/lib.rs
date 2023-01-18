@@ -1,5 +1,5 @@
 use std::borrow::{BorrowMut};
-use std::{io};
+use std::io;
 use futures::{
     executor::block_on,
     stream::{
@@ -9,8 +9,22 @@ use futures::{
 use libp2p::relay::v2::client::Client;
 use libp2p::request_response::{RequestResponseCodec, RequestResponse};
 use std::time::Duration;
-use libp2p::identity::Keypair;
-use libp2p::kad::{
+use libp2p_core::{
+    self,
+    transport::{
+        OrTransport,
+        Transport,
+        Boxed
+    },
+    upgrade::{
+        self,
+        InboundUpgradeExt,
+        OutboundUpgradeExt
+    },
+    identity::Keypair,
+    PeerId
+};
+use libp2p_kad::{
     record::store::MemoryStore,
     Kademlia,
     KademliaConfig,
@@ -18,45 +32,43 @@ use libp2p::kad::{
     QueryResult,
     GetClosestPeersOk
 };
+use libp2p::swarm::{
+    Swarm,
+    SwarmBuilder,
+    SwarmEvent,
+    NetworkBehaviour
+};
 use libp2p::relay::v2::client::transport::ClientTransport;
 use libp2p::{
     identify,
     ping,
     relay::v2 as relay,
-    swarm::{
-        self,
-        SwarmBuilder,
-        SwarmEvent,
-        NetworkBehaviour
-    },
-    Swarm,
-    PeerId,
     Multiaddr,
     noise,
     mplex,
     yamux,
     dns,
     tcp,
-    InboundUpgradeExt,
-    OutboundUpgradeExt
 };
-// use libp2p_quic as quic;
-use libp2p::core::{
-    self,
-    transport::{
-        OrTransport,
-        Transport,
-        Boxed
-    },
-    upgrade
-};
-use crate::core::muxing::StreamMuxerBox;
+use libp2p_quic as quic;
+use libp2p_core::muxing::StreamMuxerBox;
 use thiserror::Error;
 use std::str::FromStr;
 #[cfg(feature = "request-response")]
 use libp2p::request_response;
 #[cfg(feature = "test-protocol")]
 use std::iter;
+
+#[derive(libp2p_swarm::NetworkBehaviour)]
+pub struct LookupBehaviour {
+    pub(crate) kademlia: Kademlia<MemoryStore>,
+    pub(crate) ping: ping::Behaviour,
+    pub(crate) identify: identify::Behaviour,
+    #[cfg(feature = "test-protocol")]
+    pub request_response: RequestResponse<TestCodec>,
+    relay: relay::client::Client,
+    keep_alive: libp2p_swarm::keep_alive::Behaviour,
+}
 
 pub struct LookupClient {
     // local_key: Keypair,
@@ -66,16 +78,7 @@ pub struct LookupClient {
     pub swarm: Swarm<LookupBehaviour>
 }
 
-#[derive(NetworkBehaviour)]
-pub struct LookupBehaviour {
-    pub(crate) kademlia: Kademlia<MemoryStore>,
-    pub(crate) ping: ping::Behaviour,
-    pub(crate) identify: identify::Behaviour,
-    #[cfg(feature = "test-protocol")]
-    pub request_response: RequestResponse<TestCodec>,
-    relay: relay::client::Client,
-    keep_alive: swarm::keep_alive::Behaviour,
-}
+
 
 pub struct Peer {
     pub peer_id: PeerId,
@@ -128,7 +131,7 @@ impl Network {
 
 impl LookupClient {
     fn builder(local_key: Keypair, net: &Network) -> Self {
-        let local_peer_id = PeerId::from(local_key.public());
+        let local_peer_id = local_key.public().to_peer_id();
         println!("Local PeerID : {:?}", local_peer_id);
         let (relay_transport, relay_client) = relay::client::Client::new_transport_and_behaviour(local_peer_id);
         let transport = Self::build_transport(&local_key, relay_transport);
@@ -172,9 +175,9 @@ impl LookupClient {
         }
         swarm
     }
-    fn build_transport(local_key: &Keypair, relay_transport: ClientTransport) -> Boxed<(PeerId, core::muxing::StreamMuxerBox)> {
+    fn build_transport(local_key: &Keypair, relay_transport: ClientTransport) -> Boxed<(PeerId, libp2p_core::muxing::StreamMuxerBox)> {
 
-        // let mut config = quic::Config::new(&keypair);
+        let mut config = quic::Config::new(local_key);
         // config.handshake_timeout = Duration::from_secs(1);
     
         // let quic_transport = quic::async_std::Transport::new(config);
@@ -206,9 +209,9 @@ impl LookupClient {
             // buffered data has been consumed.
             yamux_config.set_window_update_mode(yamux::WindowUpdateMode::on_read());
 
-            core::upgrade::SelectUpgrade::new(yamux_config, mplex_config)
-                .map_inbound(core::muxing::StreamMuxerBox::new)
-                .map_outbound(core::muxing::StreamMuxerBox::new)
+            upgrade::SelectUpgrade::new(yamux_config, mplex_config)
+                .map_inbound(libp2p_core::muxing::StreamMuxerBox::new)
+                .map_outbound(libp2p_core::muxing::StreamMuxerBox::new)
         };
 
         transport
@@ -253,10 +256,10 @@ impl LookupClient {
             #[cfg(feature = "test-protocol")]
             request_response: synack_protocol,
             relay: relay_client,
-            keep_alive: swarm::keep_alive::Behaviour,
+            keep_alive: libp2p_swarm::keep_alive::Behaviour,
         }
     }
-    pub async fn listen(&mut self) -> Result<core::transport::ListenerId, libp2p::TransportError<io::Error>> {
+    pub async fn listen(&mut self) -> Result<libp2p_core::transport::ListenerId, libp2p::TransportError<io::Error>> {
         self.swarm.listen_on("/ip4/0.0.0.0/tcp/0".parse().unwrap())
     }
     async fn dht(&mut self, peer: PeerId) -> Result<Peer, NetworkError> {
@@ -329,7 +332,7 @@ impl LookupClient {
                         println!("{:?} added in the Routing Table.", peer);
                 },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
-                    KademliaEvent::OutboundQueryProgressed {
+                    KademliaEvent::OutboundQueryCompleted {
                         result: QueryResult::Bootstrap(_),
                         ..
                     },
@@ -337,7 +340,7 @@ impl LookupClient {
                     panic!("Unexpected bootstrap.");
                 },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Kademlia(
-                    KademliaEvent::OutboundQueryProgressed {
+                    KademliaEvent::OutboundQueryCompleted {
                         result: QueryResult::GetClosestPeers(Ok(GetClosestPeersOk { peers, .. })),
                         ..
                     },
@@ -481,7 +484,7 @@ impl LookupClient {
 #[cfg(test)]
 mod tests {
 
-    use libp2p::swarm::DialError;
+    use libp2p_swarm::DialError;
 
     use super::*;
 
@@ -495,7 +498,7 @@ mod tests {
     }
 
     #[async_std::test]
-    async fn local_dial() -> Result<(), swarm::DialError>{
+    async fn local_dial() -> Result<(), libp2p_swarm::DialError>{
         // the next address will be considered. 
         let addrs_count = 0; 
         let mut node_a = LookupClient::new(&Network::Kusama);
@@ -633,7 +636,7 @@ use async_trait::async_trait;
 use libp2p::request_response::*;
 // use std::io;
 use futures::{prelude::*, AsyncWriteExt};
-use libp2p::core::upgrade::{
+use libp2p_core::upgrade::{
     read_length_prefixed,
     write_length_prefixed
 };
