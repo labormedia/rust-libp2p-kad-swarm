@@ -178,9 +178,10 @@ impl LookupClient {
     fn build_transport(local_key: &Keypair, relay_transport: ClientTransport) -> Boxed<(PeerId, libp2p_core::muxing::StreamMuxerBox)> {
 
         let mut config = quic::Config::new(local_key);
-        // config.handshake_timeout = Duration::from_secs(1);
+        config.handshake_timeout = Duration::from_secs(1);
     
-        // let quic_transport = quic::async_std::Transport::new(config);
+        /// We are able to replace the relay_transport with the quic_transport
+        let quic_transport = quic::async_std::Transport::new(config);
 
         // Reference: https://github.com/mxinden/libp2p-lookup/blob/41f4e2fc498b44bcdd2d4b381363dea0b740336b/src/main.rs#L136-L175
         let transport = OrTransport::new(
@@ -282,14 +283,6 @@ impl LookupClient {
                         self.swarm.behaviour_mut().kademlia.borrow_mut().addresses_of_peer(&peer);
                     }
                 },
-                // SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
-                //     identify::Event::Sent {
-                //         peer_id
-                //     },
-                // ))  => {
-                //     println!("Sent identify info to {:?}", peer_id);
-                //     // break peer_id;
-                // },
                 SwarmEvent::Behaviour(LookupBehaviourEvent::Identify(
                     identify::Event::Received {
                         peer_id,
